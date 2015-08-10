@@ -3,7 +3,7 @@
      [puumerkki.codec :as codec]
      [puumerkki.pdf :as pdf]
      [puumerkki.crypt :as crypt]
-
+     [pandect.algo.sha256 :refer :all]
      [ring.adapter.jetty :as jetty]
      [ring.middleware.params :as params]            ;; query string & body params
      [ring.middleware.multipart-params :as mparams] ;; post body
@@ -30,10 +30,17 @@
 (def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))          ;;
 (def test-pdf-pkcs (pdf/compute-base64-pkcs test-pdf-data))       ;; to be sent to mpollux from https frontend
 
+(def authentication-challenge-content "secretcretseetsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecret")
+
+(def full-authentication-challenge
+   (str origin authentication-challenge-content))
+
 (def authentication-challenge
    (codec/base64-encode
-      (str origin "secretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecret")))
+      full-authentication-challenge))
 
+(defn authentication-hash [data]
+   (sha256-bytes data))
 
 
 (def js-code
@@ -103,6 +110,10 @@ function getSignature() {
       alert('hae ensin versiotiedot');
       return;
    }
+   if (location.protocol !== 'https:') {
+      alert('signature must be generated over https');
+      return;
+   }
    var http = new XMLHttpRequest();
    http.open('POST', mpolluxUrl + '/sign', true);
    http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
@@ -158,14 +169,21 @@ function verifySignature() {
 }
 
 function authenticate() {
+   if (location.protocol !== \"https:\") {
+      alert('must authenticate over https');
+      return;
+   }
    var http = new XMLHttpRequest();
    http.open('POST', mpolluxUrl + '/sign', true);
    http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
    http.onreadystatechange = function() {
      if (this.readyState == 4 && this.status == 200) {
         authresponse = JSON.parse(this.responseText);
-        // document.getElementById('authentication').innerHTML = renderObject('tunnistautuminen', authresponse);
-        sendAuth();
+        if (authresponse.status == 'ok') {
+           sendAuth();
+        } else {
+           document.getElementById('authentication').innerHTML = 'failed (card)';
+        }
      } else {
         document.getElementById('authentication').innerHTML = 'failed (frontend)';
      }
@@ -209,7 +227,6 @@ function sendAuth() {
 }
 ")
 
-
 (defn cert-givenname [cert]
    (let [node
          (codec/asn1-find cert
@@ -234,7 +251,7 @@ function sendAuth() {
 
       (= "/sign" (:uri req))
          (let [data (json/read-str (:body req) :key-fn keyword)]
-            (if (crypt/verify (:signature data) (:chain data))
+            (if (crypt/valid? (:signature data) nil (:chain data))
                (let [pdf-data (pdf/read-file "pdf/testi.pdf-signable")
                      pkcs7 (pdf/make-pkcs7 data pdf-data)]
                   (pdf/write-file! "pdf/test-allekirjoitettu.pdf"
@@ -263,18 +280,14 @@ function sendAuth() {
                 :body "Virhe."}))
 
       (= "/authenticate" (:uri req))
-         (let [data (json/read-str (:body req) :key-fn keyword)
-               cert (codec/asn1-decode (codec/base64-decode-octets (first (get data :chain))))
-               fst (cert-givenname cert)
-               snd (cert-surname cert)]
-            (if (and data (crypt/verify (:signature data) (:chain data)) fst snd)
+         (let [data (json/read-str (:body req) :key-fn keyword)]
+            (if-let [signer (and data (crypt/signer-info (:signature data) full-authentication-challenge (:chain data)))]
                {:status 200
                 :headers {"Content-Type" "text/plain"}
-                :body
-                   (str "Card owner: " fst " " snd)}
+                :body (str signer)}
                {:status 300
                 :headers {"Content-Type" "text/plain"}
-                :body "Virhe."}))
+                :body "No"}))
 
       :else
          {:status 200
@@ -301,7 +314,7 @@ function sendAuth() {
                       [:p {:id "sent"} ""]
                       [:p "Allekirjoituksen varmistus pdf:stä: "
                          [:button {:onClick "verifySignature()"}
-                         "tarkasta"]]
+                         "tarkista"]]
                       [:p {:id "status"} ""]
 
                       [:p "Tunnistautuminen: "
@@ -329,9 +342,14 @@ function sendAuth() {
       (wrap-body-string)
       ))
 
+(def jetty-opts
+   {:port 3000
+    :join false
+    :host "localhost"})
+
 (defn go []
-   (jetty/run-jetty app {:port 3000 :join false}))
+   (jetty/run-jetty app jetty-opts))
 
 (defn -main [& args]
-   (jetty/run-jetty app {:port 3000 :join false}))
+   (jetty/run-jetty app jetty-opts))
 
