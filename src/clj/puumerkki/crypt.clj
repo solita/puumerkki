@@ -1,7 +1,8 @@
 (ns puumerkki.crypt
   (:require
      [puumerkki.codec :as codec]
-     [clojure.java.io :as io])
+     [clojure.java.io :as io]
+     [clojure.string :as str])
 
   (:import
      (java.security MessageDigest)
@@ -10,6 +11,7 @@
      (java.security.spec PKCS8EncodedKeySpec)
      (java.security KeyFactory)
      (java.security.cert CertificateFactory)
+     (sun.security.x509 CRLDistributionPointsExtension)
      ))
 
 ;; signing cert
@@ -59,15 +61,15 @@
          :else
             (-> nil
                (cert-validity cert)
-               (signature-validity pub sig-b64s msg-string)))))
+               (signature-validity pub sig-b64s msg-string)
+               ; trust chain
+               ; revocation via crl/ocsp
+               ))))
 
 ;; You probably want to call validation errors instead to be able to log/report the reasons
 (defn valid? [sig-b64s msg-string chain]
    (let [errs (validation-errors sig-b64s msg-string chain)]
-      (if (empty? errs)
-         true
-         (do
-            false))))
+      (empty? errs)))
 
 (defn n-bits [num]
    (loop [n 0 h 1]
@@ -80,20 +82,41 @@
    (try
       (n-bits (.getModulus pub))
       (catch Exception e
-         (print "fail: " e)
          nil)))
+
+(defn cert-crl-bytes [cert]
+   (try
+      (nth
+         (codec/asn1-decode
+            (map
+               (fn [x] (bit-and 255 x))
+               (seq (.getExtensionValue cert "2.5.29.31"))))
+         1)
+      (catch Exception e
+         (println "ERROR: failed to find CRL source from cert with serial" (.getSerialNumber cert))
+         nil)))
+
+(defn crl-distribution-points [cert]
+   (map
+      (fn [crl]
+         (let [s (.toString (.names (.getFullName crl)))]
+            (str/replace s #"^\[URIName: (.*)\]$" "$1")))
+      (.get (.getCRLDistributionPointsExtension cert)
+         CRLDistributionPointsExtension/POINTS)))
 
 (defn cert->signer-info [cert]
    {:serial (.getSerialNumber cert)
     :issuer (.getName (.getIssuerDN cert))
-    :not-after (.getNotAfter cert)
-    :not-before (.getNotBefore cert)
+    :not-after (.getTime (.getNotAfter cert))
+    :not-before (.getTime (.getNotBefore cert))
     :givenname (.getGivenName (.getSubjectDN cert))
     :surname (.getGivenName (.getSubjectDN cert))
     :commonname (.getCommonName (.getSubjectDN cert))
     :algorithm (.getAlgorithm (.getPublicKey cert))
     :key-size (rsa-key-size (.getPublicKey cert))     ; nil for non-rsa
+    :crl-points (crl-distribution-points cert)
     })
+
 
 ;; -> nil if signature is invalid | map of signing certificate information
 (defn signer-info [sig-b64s msg-string chain]

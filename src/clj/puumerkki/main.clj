@@ -10,26 +10,25 @@
      [hiccup.core :refer [html]]
      [clojure.data.json :as json])
 
-  (:import [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface]
-           [org.apache.pdfbox.pdmodel PDDocument]
-           ;[org.apache.pdfbox.pdmodel.graphics.xobject PDPixelMap PDXObject PDJpeg]
-           [org.apache.pdfbox.io RandomAccessFile]
-           [org.apache.commons.io IOUtils]
-           (org.apache.pdfbox.cos COSName)
-           (java.security MessageDigest)
-           [java.util Calendar]
-           [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
-           (org.apache.commons.codec.digest DigestUtils)))
+(:import [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface]
+         [org.apache.pdfbox.pdmodel PDDocument]
+         ;[org.apache.pdfbox.pdmodel.graphics.xobject PDPixelMap PDXObject PDJpeg]
+         [org.apache.pdfbox.io RandomAccessFile]
+         [org.apache.commons.io IOUtils]
+         (org.apache.pdfbox.cos COSName)
+         (java.security MessageDigest)
+         [java.util Calendar]
+         [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
+         (org.apache.commons.codec.digest DigestUtils)))
 
 (def origin "https://localhost")
 
-
-;(pdf/add-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Päivi Päättäjä")  ;; make pdf/testi.pdf-signable
 (pdf/add-watermarked-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Stephen Signer" "pdf/stamp.jpeg" 100 300)
 
-(def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))          ;;
+(def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))      ;;
 (def test-pdf-pkcs (pdf/compute-base64-pkcs test-pdf-data))       ;; to be sent to mpollux from https frontend
 
+;; chosen by server
 (def authentication-challenge-content "secretcretseetsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecret")
 
 (def full-authentication-challenge
@@ -42,7 +41,6 @@
 (defn authentication-hash [data]
    (sha256-bytes data))
 
-
 (def js-code
 (str "var pkcs = '" test-pdf-pkcs "';
 var auth = '" authentication-challenge "';
@@ -53,13 +51,24 @@ var signature    = false;
 var authresponse = false;
 
 function renderObject(name,exp) {
-   info = name + ':<ul>';
+   let info = name + ':<ul>';
    Object.keys(exp).forEach(function(key) {
-      var val = '' + exp[key];
-      if (val.length > 100) {
-         val = '<font size=-4>' + val + '</font>';
+      let val = exp[key];
+      let rep;
+      if (Array.isArray(val)) {
+         rep = '<ol>';
+         val.forEach(function(val) {
+            rep += '<li>' + val;
+         });
+         rep += '</ol>';
+      } else {
+         if (val.length > 100) {
+            rep = '<font size=-4>' + val + '</font>';
+         } else {
+            rep = '' + val;
+         }
       }
-      info += '<li>' + key + ': ' + val;
+      info += '<li>' + key + ': ' + rep;
    });
    info += '</ul>'
    return info;
@@ -199,7 +208,9 @@ function sendAuth() {
    http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
    http.onreadystatechange = function() {
      if (this.readyState == 4 && this.status == 200) {
-        document.getElementById('authentication').innerHTML = this.response;
+        let signerInfo = JSON.parse(this.responseText);
+        document.getElementById('authentication').innerHTML = renderObject('Käyttäjä tunnistettu',  signerInfo);
+        console.log(signerInfo);
      } else {
         document.getElementById('authentication').innerHTML = 'failed (backend)';
      }
@@ -251,7 +262,7 @@ function sendAuth() {
 
       (= "/sign" (:uri req))
          (let [data (json/read-str (:body req) :key-fn keyword)]
-            (if (crypt/valid? (:signature data) nil (:chain data))
+            (if true ; (crypt/valid? (:signature data) nil (:chain data))
                (let [pdf-data (pdf/read-file "pdf/testi.pdf-signable")
                      pkcs7 (pdf/make-pkcs7 data pdf-data)]
                   (pdf/write-file! "pdf/test-allekirjoitettu.pdf"
@@ -284,7 +295,7 @@ function sendAuth() {
             (if-let [signer (and data (crypt/signer-info (:signature data) full-authentication-challenge (:chain data)))]
                {:status 200
                 :headers {"Content-Type" "text/plain"}
-                :body (str signer)}
+                :body (json/write-str signer)}
                {:status 300
                 :headers {"Content-Type" "text/plain"}
                 :body "No"}))
@@ -295,7 +306,7 @@ function sendAuth() {
              (html
                 [:html
                    [:head
-                      [:title "allekirjoitustesti"]
+                      [:title "Toimikorttitesti"]
                       [:script js-code]
                       [:style  style]
                       [:meta {:charset "UTF-8"}]]
