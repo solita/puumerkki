@@ -24,8 +24,6 @@
 
 ;; -----------------------------------------------------------------------------------
 
-(def test-shasum (atom nil)) ;; <- temporary
-
 
 (def byterange-pattern-vector
   [47 66 121 116 101 82 97 110 103 101 32 91])
@@ -238,18 +236,20 @@
             pos)))
 
 ;; see https://www.adobe.com/devnet-docs/acrobatetk/tools/DigSigDC/Acrobat_DigitalSignatures_in_PDF.pdf
-(defn compute-base64-pkcs [pdf-data]
+
+(defn signable-data-hash [pdf-data]
    (let [[at sa la sb lb] (find-byte-ranges pdf-data)
          signature-space-start (find-signature-space pdf-data 0)
          hashdata (maybe-get-byte-ranges pdf-data sa la sb lb)]
      (if (and hashdata signature-space-start)
-       (let
-         [sha256sum (map (partial bit-and 255) (sha256-bytes hashdata))
-          pkcs (make-pkcs sha256sum)
-          payload (codec/base64-encode (map (partial bit-and 255) pkcs))]
-        (reset! test-shasum sha256sum) ;; <- temporary
-        payload) ;; to be sent to digisign in the data parameter
+        (map (partial bit-and 255) (sha256-bytes hashdata))
        nil)))
+
+(defn compute-base64-pkcs [pdf-data]
+   (if-let [sha256sum (signable-data-hash pdf-data)]
+      (let [pkcs (make-pkcs sha256sum)
+            payload (codec/base64-encode (map (partial bit-and 255) pkcs))]
+        payload)))
 
 (defn blank-signer []
   (proxy [SignatureInterface] []
@@ -290,12 +290,14 @@
 
 
 
-(defn make-pkcs7 [data]
+(defn make-pkcs7 [data pdf-data]
    (let [signature (codec/base64-decode-octets (:signature data))
          chain (map codec/base64-decode-octets (:chain data))
          chain-asn (map codec/asn1-decode chain)
          card-asn (first chain-asn)
          pcertinfo (maybe-get-certificate-info card-asn)
-         sha256sum @test-shasum
+         sha256sum (signable-data-hash pdf-data)
          pkcs7-asn (make-pkcs7-asn chain pcertinfo sha256sum signature)]
       (codec/asn1-encode pkcs7-asn)))
+
+

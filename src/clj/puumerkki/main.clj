@@ -139,12 +139,11 @@ function sendSignature() {
 
       (= "/sign" (:uri req))
          (let [data (json/read-str (:body req) :key-fn keyword)
-               pkcs7 (pdf/make-pkcs7 data)
+               pdf-data (pdf/read-file "pdf/testi.pdf-signable")
+               pkcs7 (pdf/make-pkcs7 data pdf-data)
              ]
             (pdf/write-file! "pdf/test-allekirjoitettu.pdf"
-               (pdf/write-signature!
-                  (pdf/read-file "pdf/testi.pdf-signable")
-                  pkcs7))
+               (pdf/write-signature! pdf-data pkcs7))
             {:status 200
              :headers {"Content-Type" "text/plain"}
              :body "ok"})
