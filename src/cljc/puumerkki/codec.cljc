@@ -1,4 +1,4 @@
-(ns codec.core
+(ns puumerkki.codec
   #?(:cljs (:require [goog.crypt :as crypt])))
 
 ;;; misc utils
@@ -924,6 +924,19 @@
         (println "            encoded " encd)
         false))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;,
+
+(defn hex-char [n]
+  (nth [48 49 50 51 52 53 54 55 56 57 97 98 99 100 101 102] n))
+
+(defn hexencode [bs]
+   (loop [bs bs out ()]
+      (if (empty? bs)
+         (reverse out)
+         (let [x (first bs)]
+            (recur (rest bs)
+               (cons (hex-char (bit-and x 15))
+                  (cons (hex-char (bit-and (bit-shift-right x 4) 15)) out)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;,

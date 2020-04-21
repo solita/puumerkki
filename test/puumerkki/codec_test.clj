@@ -1,7 +1,7 @@
 
 ;;; ASN.1 encoding / known values
 
-(ns codec.core-test
+(ns puumerkki.codec-test
   (:require [clojure.test :refer :all]
             [codec.core :refer :all]))
 
