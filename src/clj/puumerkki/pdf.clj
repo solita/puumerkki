@@ -146,14 +146,13 @@
 ;; Now that this is handled in backend, we could also get this while adding
 ;; the space or by parsing the whole pdf.
 (defn find-byte-ranges [data]
-   (let [end (or (count data) 0)]
-      (loop [at 0]
-         (if (= at end)
-            (vector false false false false false)
-            (let [posp (vector-match-at data at byterange-pattern-vector)]
-               (if posp
-                  (grab-byte-ranges posp (walk-buffer data posp))
-                  (recur (+ at 1))))))))
+   (loop [at (- (count data) 1)]
+      (if (= at -1)
+         (vector false false false false false)
+         (let [posp (vector-match-at data at byterange-pattern-vector)]
+            (if posp
+               (grab-byte-ranges posp (walk-buffer data posp))
+               (recur (- at 1)))))))
 
 ;; read the byte ranges (for hashing)
 ;; bvec pos1 len1 pos2 len2 → bvec' | nil, if positions or lengths are missing
@@ -224,16 +223,15 @@
             (recur (+ pos 1) (+ n 1))
             n))))
 
-;; byte ranges known to be at pos, so signature space is within a few bytes forward
 (defn find-signature-space [data pos]
-   (loop [pos pos distance 0]
+   (loop [pos pos]
       (cond
          (not (aget data pos))
             false ;; out of data
-         (< (zeroes-at data pos) 512)
-            (recur (+ pos 1) (+ distance 1))
+         (and (= (aget data pos) 60) (> (zeroes-at data (+ pos 1)) 512))
+            (+ pos 1)
          :else
-            pos)))
+            (recur (+ pos 1)))))
 
 ;; see https://www.adobe.com/devnet-docs/acrobatetk/tools/DigSigDC/Acrobat_DigitalSignatures_in_PDF.pdf
 
@@ -266,13 +264,21 @@
     (.setSignDate (Calendar/getInstance)))) ;; not a secure time source, but best we can do here
 
 
+;;; pdfbox notes
+; - in 1.8 it was possible to add signature and use saveincremental
+; - in 2.0 it seems to be necessary to saveIncrementalForExternalSigning, even though we aren't really using it
+; - not adding a signature (which we don't use) seems to result in broken byte ranges in output
+; - using saveincremental would appear to require marking altered objects
+; - it may be possible to use saveincremental again in 2.1=
+
+;; Warning! Do not parse user supplied PDF:s without proper safety equipment.
+
 (defn add-signature-space [pdf-path signer-name]
   (let [output-path (str pdf-path "-signable")
         input-document (io/file pdf-path)
         doc (PDDocument/load input-document)
         sig (signature signer-name)
-        dummy (blank-signer)
-        ]
+        dummy (blank-signer)]
       (with-open [out (io/output-stream output-path)]
          (.addSignature doc sig dummy)
          (let [ext (.saveIncrementalForExternalSigning doc out)]
@@ -285,10 +291,8 @@
 (defn write-signature! [data pkcs7]
    (let [signature (seq->byte-array (codec/hexencode pkcs7))
          pos (find-signature-space data 0)]
-      ; (println "Copying signature to pos " pos " -> " (copy-bytes! data signature pos))
+      (copy-bytes! data signature pos)
       data))
-
-
 
 (defn make-pkcs7 [data pdf-data]
    (let [signature (codec/base64-decode-octets (:signature data))
