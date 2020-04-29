@@ -925,11 +925,20 @@
         false))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;,
+;;
+;; Hex encoding
+;;
 
 (defn hex-char [n]
   (nth [48 49 50 51 52 53 54 55 56 57 97 98 99 100 101 102] n))
 
-(defn hexencode [bs]
+(def hex-bits
+   (let [bits (reduce (fn [out x] (assoc out x (- x 48))) {} (range 48 58))
+         bits (reduce (fn [out x] (assoc out x (- (+ x 10) 97))) bits (range 97 103))
+         bits (reduce (fn [out x] (assoc out x (- (+ x 10) 65))) bits (range 65 71))]
+      bits))
+      
+(defn hex-encode [bs]
    (loop [bs bs out ()]
       (if (empty? bs)
          (reverse out)
@@ -938,5 +947,14 @@
                (cons (hex-char (bit-and x 15))
                   (cons (hex-char (bit-and (bit-shift-right x 4) 15)) out)))))))
 
+(defn hex-decode [chars]
+   (if (even? (count chars))
+      (let [bits (map (comp hex-bits char2ascii) chars)]
+         (if (every? (fn [x] x) bits)
+            (map (fn [[a b]] (+ (* a 16) b)) (partition 2 bits))
+            nil))
+      nil))
+         
+                   
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;,
