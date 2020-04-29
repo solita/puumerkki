@@ -20,14 +20,6 @@
            [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
            (org.apache.commons.codec.digest DigestUtils)))
 
-;; Steps
-;;  1. (add-signature-space "your.pdf" "signed.pdf" "Stephen Signer") -> create "signed.pdf"
-;;  2. (compute-base64-pkcs (read-file "signed.pdf")) -> compute data required for signing the signable document
-;;  3. signature <- obtain signature from external source
-;;  4. (write-signature! pdf-data (make-pkcs7 signature pdf-data))
-
-;; -----------------------------------------------------------------------------------
-
 
 (pdf/add-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Anni Allekirjoittaja")  ;; make pdf/testi.pdf-signable
 (def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))          ;;
