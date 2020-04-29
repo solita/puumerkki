@@ -16,8 +16,8 @@
            (org.apache.commons.codec.digest DigestUtils)))
 
 ;; Steps
-;;  1. (add-signature-space "your.pdf" "Stephen Signer") -> create "your.pdf-signable"
-;;  2. (compute-base64-pkcs [pdf-data]) -> compute data required for signing the signable document
+;;  1. (add-signature-space "your.pdf" "output.pdf" "Stephen Signer") -> create "output.pdf", has space for a signature
+;;  2. (compute-base64-pkcs ) -> compute data required for signing the signable document
 ;;  3. obtain signature from external source
 ;;  4. construct a valid encoded pkcs7 signature to be added to pdf
 ;;  4. (write-signature! [pdf-data] pkcs7)
@@ -223,8 +223,8 @@
             (recur (+ pos 1) (+ n 1))
             n))))
 
-(defn find-signature-space [data pos]
-   (loop [pos pos]
+(defn find-signature-space [data]
+   (loop [pos 0]
       (cond
          (not (aget data pos))
             false ;; out of data
@@ -237,10 +237,12 @@
 
 (defn signable-data-hash [pdf-data]
    (let [[at sa la sb lb] (find-byte-ranges pdf-data)
-         signature-space-start (find-signature-space pdf-data 0)
+         signature-space-start (find-signature-space pdf-data)
          hashdata (maybe-get-byte-ranges pdf-data sa la sb lb)]
      (if (and hashdata signature-space-start)
-        (map (partial bit-and 255) (sha256-bytes hashdata))
+        (let [hash (map (partial bit-and 255) (sha256-bytes hashdata))]
+           ;(write-file! "hashdata" hashdata) ;; for checking the data in case of hashing issues
+           hash)
        nil)))
 
 (defn compute-base64-pkcs [pdf-data]
@@ -273,26 +275,35 @@
 
 ;; Warning! Do not parse user supplied PDF:s without proper safety equipment.
 
-(defn add-signature-space [pdf-path signer-name]
-  (let [output-path (str pdf-path "-signable")
-        input-document (io/file pdf-path)
-        doc (PDDocument/load input-document)
-        sig (signature signer-name)
-        dummy (blank-signer)]
-      (with-open [out (io/output-stream output-path)]
-         (.addSignature doc sig dummy)
-         (let [ext (.saveIncrementalForExternalSigning doc out)]
-            (let [data (.getContent ext)] ;; data to be signed
-               (.setSignature ext (byte-array 32))
-               (.close doc))))
-      output-path))
+;; "foo.pdf" "foo-signed.pdf" "Signer Name" -> "foo-signed.pdf" | nil on error
+(defn add-signature-space [pdf-path output-pdf-path signer-name]
+   (try
+      (let [input-document (io/file pdf-path)
+            doc (PDDocument/load input-document)
+            sig (signature signer-name)
+            dummy (blank-signer)]
+         (with-open [out (io/output-stream output-pdf-path)]
+            (.addSignature doc sig dummy)
+            (let [ext (.saveIncrementalForExternalSigning doc out)]
+               (let [data (.getContent ext)] ;; data to be signed
+                  (.setSignature ext (byte-array 32))
+                  (.close doc))))
+      output-pdf-path)
+      (catch Exception e
+         ;; log reason 
+         ;; todo: since there are various logging systems in use, pass handlers optionally here?
+         (println "ERROR: " e)
+         nil)))
 
-;; write-signature pdf-data-byte-array pkcs7-asn1-der-byte-sequence → pdf-data-byte-array (modified)
+;; write-signature pdf-data-byte-array pkcs7-asn1-der-byte-sequence → pdf-data-byte-array (modified) | nil
 (defn write-signature! [data pkcs7]
-   (let [signature (seq->byte-array (codec/hexencode pkcs7))
-         pos (find-signature-space data 0)]
-      (copy-bytes! data signature pos)
-      data))
+   (let [signature (seq->byte-array (codec/hex-encode pkcs7))
+         pos (find-signature-space data)]
+      (if pos
+         (do 
+            (copy-bytes! data signature pos)
+            data)
+         nil)))
 
 (defn make-pkcs7 [data pdf-data]
    (let [signature (codec/base64-decode-octets (:signature data))
@@ -304,4 +315,30 @@
          pkcs7-asn (make-pkcs7-asn chain pcertinfo sha256sum signature)]
       (codec/asn1-encode pkcs7-asn)))
 
+(defn message-digest [asn]
+   (if-let [node (codec/asn1-find asn [:sequence [:identifier 1 2 840 113549 1 9 4] [:set :octet-string]])]
+      (-> node (nth 2) (nth 1) (nth 1))))
+      
+(defn cursory-verify-signature [path]
+   (if-let [data (read-file path)]
+      (let [[at sa la sb lb] (find-byte-ranges data)]
+         (if (and 
+               at sa sb lb                  ;; byte ranges there 
+               (= sa 0)                     ;; signed data starts from beginning 
+               (= (+ sb lb) (count data))   ;; signed data ends at end of file
+               (< (+ sa la) sb)             ;; first range is below the second one
+               (= 60 (aget data la))        ;; first range is followed by < (though this is odd)
+               )
+            (let [sigspace 
+                  (subarray data 
+                     (+ la 1)               ;; skip the leading <
+                     (- sb la 2))           ;; up to start of data to be hashed 
+                  sigdata (codec/hex-decode sigspace)]
+               (if sigdata
+                  (if-let [asn-ast (codec/asn1-decode sigdata)]
+                     (if-let [digest (message-digest asn-ast)]
+                        digest))))))))
+               
+         
+         
 
