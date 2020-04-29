@@ -21,17 +21,15 @@
            (org.apache.commons.codec.digest DigestUtils)))
 
 ;; Steps
-;;  1. (add-signature-space "your.pdf" "Stephen Signer") -> create "your.pdf-signable"
-;;  2. (compute-base64-pkcs [pdf-data]) -> compute data required for signing the signable document
-;;  3. obtain signature from external source
-;;  4. construct a valid encoded pkcs7 signature to be added to pdf
-;;  4. (write-signature! [pdf-data] pkcs7)
+;;  1. (add-signature-space "your.pdf" "signed.pdf" "Stephen Signer") -> create "signed.pdf"
+;;  2. (compute-base64-pkcs (read-file "signed.pdf")) -> compute data required for signing the signable document
+;;  3. signature <- obtain signature from external source
+;;  4. (write-signature! pdf-data (make-pkcs7 signature pdf-data))
 
 ;; -----------------------------------------------------------------------------------
 
 
-
-(pdf/add-signature-space "pdf/testi.pdf" "Anni Allekirjoittaja")  ;; make pdf/test.pdf-signable
+(pdf/add-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Anni Allekirjoittaja")  ;; make pdf/testi.pdf-signable
 (def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))          ;;
 (def test-pdf-pkcs (pdf/compute-base64-pkcs test-pdf-data))       ;; to be sent to mpollux from https frontend
 
@@ -76,14 +74,21 @@ function getVersion() {
    http.send();
 }
 
-var test1 = {'selector':{},'content':pkcs,'contentType':'data','hashAlgorithm':'SHA256','signatureType':\"signature\",'version':'1.1'};
+var test1 = {'selector':{},
+             'content':pkcs,
+             'contentType':'data',
+             'hashAlgorithm':'SHA256',
+             'signatureType':'signature',
+             'version':'1.1'};
 
-var test2 = {'selector': {'keyusages': ['digitalsignature'],
-                    'keyalgorithms': ['rsa']},
+var test1x = {'selector': {
+                          'keyusages': ['digitalsignature'],   // signature fails if this is used, even though it seems to work as intended up to selection of certificate
+                          'keyalgorithms': ['rsa']
+                          },
        'content':pkcs,
-       'contentType':'digest',
+       'contentType':'data',
        'hashAlgorithm':'SHA256',
-       'signatureType':'pkcs7',
+       'signatureType':'signature',
        'version':'1.1'};
 
 
