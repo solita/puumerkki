@@ -46,12 +46,15 @@ function renderObject(name,exp) {
    return info;
 }
 
+function spinner(target) {
+   document.getElementById(target).innerHTML= '<div class=spinner><div>';
+}
+
 function getVersion() {
    var http = new XMLHttpRequest();
    http.open('GET', mpolluxUrl + '/version');
    http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
    http.overrideMimeType('application/json'); // avoid xml parsing error due to missing mime
-   document.getElementById('mpollux').innerHTML= 'Ladataan tietoja...';
 
    http.onreadystatechange = function() {
      if (this.readyState == 4 && this.status == 200) {
@@ -63,6 +66,7 @@ function getVersion() {
      }
    }
    http.onloadend = function () {};
+   spinner('mpollux');
    http.send();
 }
 
@@ -105,6 +109,7 @@ function getSignature() {
    }
    http.onloadend = function () {};
    console.log('Sending ' + JSON.stringify(test1));
+   spinner('signature');
    http.send(JSON.stringify(test1));
 }
 
@@ -124,6 +129,7 @@ function sendSignature() {
      }
    }
    http.onloadend = function () {};
+   spinner('sent');
    http.send(JSON.stringify(signature));
 }
 
@@ -139,10 +145,29 @@ function verifySignature() {
      }
    }
    http.onloadend = function () {};
+   spinner('status');
    http.send(JSON.stringify(signature));
 }
 
 "))
+
+(def style 
+"
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: solid black 1px;
+  animation-name: spin;
+  animation-duration: 2000ms;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+@keyframes spin {
+  from {transform:rotate(0deg);}
+  to {transform:rotate(360deg);}
+}
+")
+              
 
 
 (defn router [req]
@@ -158,7 +183,7 @@ function verifySignature() {
                (pdf/write-signature! pdf-data pkcs7))
             {:status 200
              :headers {"Content-Type" "text/plain"}
-             :body "ok"})
+             :body "OK"})
 
       (= "/verify" (:uri req))
          (let [pdf-data (pdf/read-file "pdf/test-allekirjoitettu.pdf")
@@ -168,14 +193,14 @@ function verifySignature() {
                {:status 200
                 :headers {"Content-Type" "text/plain"}
                 :body 
-                   (str "FOO <pre>"
+                   (str "OK: <pre>"
                       (with-out-str 
                          (clojure.pprint/pprint sigp))
                       "</pre>")
                }
                {:status 300
                 :headers {"Content-Type" "text/plain"}
-                :body "Not good."}))
+                :body "Virhe."}))
 
       :else
          {:status 200
@@ -185,28 +210,27 @@ function verifySignature() {
                    [:head
                       [:title "allekirjoitustesti"]
                       [:script js-code]
+                      [:style  style]
                       [:meta {:charset "UTF-8"}]]
                    [:body
-                      ;; fiksataan tietty allekirjoitus-hash
-                      [:p "Version haku: "
+                      [:p "Digisign version haku: "
                          [:button {:onClick "getVersion()"}
                          "hae"]]
                       [:p {:id "mpollux"} ""]
-                      [:p "Allekirjoituksen testaus: "
+                      [:p "Allekirjoituksen teko kortilla: "
                          [:button {:onClick "getSignature()"}
                          "allekirjoita"]]
                       [:p {:id "signature"} ""]
-                      [:p "Allekirjoituksen tallennus: "
+                      [:p "Allekirjoituksen tallennus pdf:ään: "
                          [:button {:onClick "sendSignature()"}
                          "lähetä"]]
                       [:p {:id "sent"} ""]
-                      [:p "Allekirjoituksen varmistus: "
+                      [:p "Allekirjoituksen varmistus pdf:stä: "
                          [:button {:onClick "verifySignature()"}
                          "tarkasta"]]
                       [:p {:id "status"} ""]
                       
                       ]])}))
-
 (defn wrap-content-type [response content-type]
    (if (get-in response [:headers "Content-Type"])
       response
