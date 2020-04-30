@@ -512,7 +512,7 @@
               (if ok
                 (let [[elems bs] (grab bs len)]
                   (if elems
-                    (vector true (vector :octet-string elems) bs)
+                    (vector true (vector :octet-string (into [] elems)) bs)
                     (vector false "out of data reading octet string" bs)))
                 (vector false len bs)))
             (and (= consp 0) (= tagnum tag-printable-string))
