@@ -127,6 +127,21 @@ function sendSignature() {
    http.send(JSON.stringify(signature));
 }
 
+function verifySignature() {
+   var http = new XMLHttpRequest();
+   http.open('GET', '/verify', true);
+   http.onreadystatechange = function() {
+     if (this.readyState == 4 && this.status == 200) {
+        document.getElementById('status').innerHTML = this.response;
+        console.log(this);
+     } else {
+        document.getElementById('status').innerHTML = 'error';
+     }
+   }
+   http.onloadend = function () {};
+   http.send(JSON.stringify(signature));
+}
+
 "))
 
 
@@ -144,6 +159,23 @@ function sendSignature() {
             {:status 200
              :headers {"Content-Type" "text/plain"}
              :body "ok"})
+
+      (= "/verify" (:uri req))
+         (let [pdf-data (pdf/read-file "pdf/test-allekirjoitettu.pdf")
+               sigp (pdf/cursory-verify-signature pdf-data)
+             ]
+            (if sigp
+               {:status 200
+                :headers {"Content-Type" "text/plain"}
+                :body 
+                   (str "FOO <pre>"
+                      (with-out-str 
+                         (clojure.pprint/pprint sigp))
+                      "</pre>")
+               }
+               {:status 300
+                :headers {"Content-Type" "text/plain"}
+                :body "Not good."}))
 
       :else
          {:status 200
@@ -168,6 +200,11 @@ function sendSignature() {
                          [:button {:onClick "sendSignature()"}
                          "lähetä"]]
                       [:p {:id "sent"} ""]
+                      [:p "Allekirjoituksen varmistus: "
+                         [:button {:onClick "verifySignature()"}
+                         "tarkasta"]]
+                      [:p {:id "status"} ""]
+                      
                       ]])}))
 
 (defn wrap-content-type [response content-type]
