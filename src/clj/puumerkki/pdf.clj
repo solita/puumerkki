@@ -237,9 +237,8 @@
 
 (defn signable-data-hash [pdf-data]
    (let [[at sa la sb lb] (find-byte-ranges pdf-data)
-         signature-space-start (find-signature-space pdf-data)
          hashdata (maybe-get-byte-ranges pdf-data sa la sb lb)]
-     (if (and hashdata signature-space-start)
+     (if hashdata 
         (let [hash (map (partial bit-and 255) (sha256-bytes hashdata))]
            ;(write-file! "hashdata" hashdata) ;; for checking the data in case of hashing issues
            hash)
@@ -318,27 +317,26 @@
 (defn message-digest [asn]
    (if-let [node (codec/asn1-find asn [:sequence [:identifier 1 2 840 113549 1 9 4] [:set :octet-string]])]
       (-> node (nth 2) (nth 1) (nth 1))))
-      
-(defn cursory-verify-signature [path]
-   (if-let [data (read-file path)]
-      (let [[at sa la sb lb] (find-byte-ranges data)]
-         (if (and 
-               at sa sb lb                  ;; byte ranges there 
-               (= sa 0)                     ;; signed data starts from beginning 
-               (= (+ sb lb) (count data))   ;; signed data ends at end of file
-               (< (+ sa la) sb)             ;; first range is below the second one
-               (= 60 (aget data la))        ;; first range is followed by < (though this is odd)
-               )
-            (let [sigspace 
-                  (subarray data 
-                     (+ la 1)               ;; skip the leading <
-                     (- sb la 2))           ;; up to start of data to be hashed 
-                  sigdata (codec/hex-decode sigspace)]
-               (if sigdata
-                  (if-let [asn-ast (codec/asn1-decode sigdata)]
-                     (if-let [digest (message-digest asn-ast)]
-                        digest))))))))
-               
-         
-         
 
+;; pdf-data -> nil | validish-signature-ast (only structure and digest is verified, not the actual signature)
+(defn cursory-verify-signature [data]
+   (let [[at sa la sb lb] (find-byte-ranges data)]
+      (if (and 
+            at sa sb lb                  ;; byte ranges there 
+            (= sa 0)                     ;; signed data starts from beginning 
+            (= (+ sb lb) (count data))   ;; signed data ends at end of file
+            (< (+ sa la) sb)             ;; first range is below the second one
+            (= 60 (aget data la)))       ;; first range is followed by < (though this is odd)
+         (if-let [sigspace 
+               (subarray data 
+                  (+ la 1)               ;; skip the leading <
+                  (- sb la 2))]          ;; up to start of data to be hashed 
+            (if-let [sigdata (codec/hex-decode sigspace)]
+               (if-let [asn-ast (codec/asn1-decode sigdata)]
+                  (if-let [digest (message-digest asn-ast)]
+                     (if-let [correct-digest (signable-data-hash data)]
+                        (if (= digest correct-digest)
+                           asn-ast
+                           nil ;; digest mismatch
+                           )))))))))
+                           
