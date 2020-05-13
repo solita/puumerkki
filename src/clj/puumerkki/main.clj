@@ -21,7 +21,9 @@
            (org.apache.commons.codec.digest DigestUtils)))
 
 
-(pdf/add-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Anni Allekirjoittaja")  ;; make pdf/testi.pdf-signable
+;(pdf/add-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Päivi Päättäjä")  ;; make pdf/testi.pdf-signable
+(pdf/add-watermarked-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Stephen Signer" "pdf/stamp.jpeg" 100 300)
+
 (def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))          ;;
 (def test-pdf-pkcs (pdf/compute-base64-pkcs test-pdf-data))       ;; to be sent to mpollux from https frontend
 
@@ -151,7 +153,7 @@ function verifySignature() {
 
 "))
 
-(def style 
+(def style
 "
 .spinner {
   width: 14px;
@@ -167,7 +169,7 @@ function verifySignature() {
   to {transform:rotate(360deg);}
 }
 ")
-              
+
 
 
 (defn router [req]
@@ -192,9 +194,9 @@ function verifySignature() {
             (if sigp
                {:status 200
                 :headers {"Content-Type" "text/plain"}
-                :body 
+                :body
                    (str "OK: <pre>"
-                      (with-out-str 
+                      (with-out-str
                          (clojure.pprint/pprint sigp))
                       "</pre>")
                }
@@ -229,7 +231,7 @@ function verifySignature() {
                          [:button {:onClick "verifySignature()"}
                          "tarkasta"]]
                       [:p {:id "status"} ""]
-                      
+
                       ]])}))
 (defn wrap-content-type [response content-type]
    (if (get-in response [:headers "Content-Type"])

@@ -4,7 +4,8 @@
      [puumerkki.codec :as codec]
      [clojure.java.io :as io])
 
-  (:import [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface]
+  (:import [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface SignatureOptions]
+           [org.apache.pdfbox.pdmodel.interactive.digitalsignature.visible PDVisibleSignDesigner PDVisibleSigProperties]
            [org.apache.pdfbox.pdmodel PDDocument]
            ;[org.apache.pdfbox.pdmodel.graphics.xobject PDPixelMap PDXObject PDJpeg]
            [org.apache.pdfbox.io RandomAccessFile]
@@ -12,8 +13,14 @@
            (org.apache.pdfbox.cos COSName)
            (java.security MessageDigest)
            [java.util Calendar]
-           [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
-           (org.apache.commons.codec.digest DigestUtils)))
+           [java.io File FileInputStream FileOutputStream ByteArrayOutputStream ByteArrayInputStream]
+           (java.security.cert CertificateFactory)
+           (java.security Signature)
+           (org.apache.commons.codec.digest DigestUtils)
+           [org.apache.pdfbox.pdmodel.font PDFont PDType1Font PDTrueTypeFont]
+           ;[org.apache.pdfbox.pdmodel.edit PDPageContentStream]
+           [org.apache.pdfbox.pdmodel PDPageContentStream]
+           ))
 
 ;; Steps
 ;;  1. (add-signature-space "your.pdf" "output.pdf" "Stephen Signer") -> create "output.pdf", has space for a signature
@@ -39,6 +46,9 @@
       (io/copy (io/input-stream path) out)
       (.toByteArray out)))
 
+(defn read-pdf [path]
+   (PDDocument/load (io/file path)))
+
 (defn write-file! [path data]
    (with-open [w (clojure.java.io/output-stream path)]
       (.write w data)))
@@ -46,7 +56,7 @@
 
 ;; byte array helpers (based on old js versions)
 
-(defn seq->byte-array [seq] ;; bytes -128 -- 127
+(defn seq->byte-array [seq] ;; java convention, bytes [-128 - +127]
    (let [arr (byte-array (count seq))]
       (loop [pos 0 seq seq]
          (if (empty? seq)
@@ -55,14 +65,14 @@
                (aset-byte arr pos (first seq))
                (recur (+ pos 1) (rest seq)))))))
 
-(defn unsigned-seq->byte-array [seq] ;; bytes -128 -- 127
-   (let [arr (byte-array (count seq))]
-      (loop [pos 0 seq seq]
-         (if (empty? seq)
-            arr
-            (do
-               (aset-byte arr pos (first seq))
-               (recur (+ pos 1) (rest seq)))))))
+(def unsigned->signed-byte
+  (let [mask (bit-shift-right (bit-and-not -1 255) 7)]
+     (fn [x]
+        (bit-or x (* mask (bit-and x 128))))))
+
+(defn unsigned-seq->byte-array [seq] ;; bytes [0 - 255]
+   (seq->byte-array
+      (map unsigned->signed-byte seq)))
 
 (defn subarray [arr start len]
    (if (or (< len 0) (< start 0) (> (+ start len) (count arr)))
@@ -235,14 +245,14 @@
 
 ;; see https://www.adobe.com/devnet-docs/acrobatetk/tools/DigSigDC/Acrobat_DigitalSignatures_in_PDF.pdf
 
-(defn signable-data-hash [pdf-data]
+(defn signable-data [pdf-data]
    (let [[at sa la sb lb] (find-byte-ranges pdf-data)
          hashdata (maybe-get-byte-ranges pdf-data sa la sb lb)]
-     (if hashdata 
-        (let [hash (map (partial bit-and 255) (sha256-bytes hashdata))]
-           ;(write-file! "hashdata" hashdata) ;; for checking the data in case of hashing issues
-           hash)
-       nil)))
+     hashdata))
+
+(defn signable-data-hash [pdf-data]
+   (if-let [hashdata (signable-data pdf-data)]
+      (map (partial bit-and 255) (sha256-bytes hashdata))))
 
 (defn compute-base64-pkcs [pdf-data]
    (if-let [sha256sum (signable-data-hash pdf-data)]
@@ -254,6 +264,8 @@
   (proxy [SignatureInterface] []
     (sign [content]
        (byte-array (byte-array 100)))))
+
+;; "Signer Name", (nil | image) -> PDSignature
 
 (defn signature [name]
   (doto (PDSignature.)
@@ -289,17 +301,50 @@
                   (.close doc))))
       output-pdf-path)
       (catch Exception e
-         ;; log reason 
+         ;; log reason
          ;; todo: since there are various logging systems in use, pass handlers optionally here?
          (println "ERROR: " e)
          nil)))
+
+(defn add-watermarked-signature-space [pdf-path output-pdf-path signer-name image-path x y]
+   (let [pdf (read-pdf pdf-path)
+         sig-designer
+            (PDVisibleSignDesigner.
+               pdf
+               (io/input-stream image-path)
+               1)
+         sig-props (PDVisibleSigProperties.)
+         sig-opts  (SignatureOptions.)
+        ]
+       ;(.signerName sig-props "")
+       (.xAxis sig-designer x)    ;; 0 left
+       (.yAxis sig-designer y)    ;; 0 top
+       ;(.zoom sig-designer 100)
+       (.visualSignEnabled sig-props true)
+       (.setPdVisibleSignature sig-props sig-designer)
+       (.buildSignature sig-props)
+       (.setVisualSignature sig-opts sig-props)
+       (with-open [out (io/output-stream output-pdf-path)]
+            (.addSignature
+               pdf                     ;; PDDocument
+               (signature signer-name) ;; PDSignature
+               (blank-signer)          ;; SignatureInterface (dummy)
+               sig-opts                ;; SignatureOptions
+               )
+            (let [ext (.saveIncrementalForExternalSigning pdf out)]
+               (let [data (.getContent ext)] ;; data to be signed
+                  (.setSignature ext (byte-array 32))
+                  (.close pdf))))
+      output-pdf-path
+      ))
+
 
 ;; write-signature pdf-data-byte-array pkcs7-asn1-der-byte-sequence → pdf-data-byte-array (modified) | nil
 (defn write-signature! [data pkcs7]
    (let [signature (seq->byte-array (codec/hex-encode pkcs7))
          pos (find-signature-space data)]
       (if pos
-         (do 
+         (do
             (copy-bytes! data signature pos)
             data)
          nil)))
@@ -321,22 +366,60 @@
 ;; pdf-data -> nil | validish-signature-ast (only structure and digest is verified, not the actual signature)
 (defn cursory-verify-signature [data]
    (let [[at sa la sb lb] (find-byte-ranges data)]
-      (if (and 
-            at sa sb lb                  ;; byte ranges there 
-            (= sa 0)                     ;; signed data starts from beginning 
+      (if (and
+            at sa sb lb                  ;; byte ranges there
+            (= sa 0)                     ;; signed data starts from beginning
             (= (+ sb lb) (count data))   ;; signed data ends at end of file
             (< (+ sa la) sb)             ;; first range is below the second one
             (= 60 (aget data la)))       ;; first range is followed by < (though this is odd)
-         (if-let [sigspace 
-               (subarray data 
+         (if-let [sigspace
+               (subarray data
                   (+ la 1)               ;; skip the leading <
-                  (- sb la 2))]          ;; up to start of data to be hashed 
+                  (- sb la 2))]          ;; up to start of data to be hashed
             (if-let [sigdata (codec/hex-decode sigspace)]
                (if-let [asn-ast (codec/asn1-decode sigdata)]
                   (if-let [digest (message-digest asn-ast)]
                      (if-let [correct-digest (signable-data-hash data)]
                         (if (= digest correct-digest)
+                           ;; all good so far
                            asn-ast
-                           nil ;; digest mismatch
-                           )))))))))
-                           
+                           nil)))))))))
+
+; (defn verify-signature [signature-data]
+;    (let [cf (CertificateFactory/getInstance "X.509")
+;          cbarr (unsigned-seq->byte-array signature-data)]
+;       42))
+;
+; (defn inc-update [path out-path]
+;    (let [pdf (read-pdf path)
+;          page (.getPage pdf 0)
+;          font
+;             org.apache.pdfbox.pdmodel.font.PDType1Font/HELVETICA
+;             ; org.apache.pdfbox.pdmodel.font.PDType1Font/TIMES_ROMAN
+;          font-size 14
+;          catalog (.getDocumentCatalog pdf)
+;          pages (.getPages catalog) ;; no longer getAllPages
+;          first (.get pages 0)
+;          content-stream
+;             (PDPageContentStream. pdf first
+;                true  ;; append
+;                false ;; compress
+;                )]
+;       (.beginText content-stream)
+;       (.newLineAtOffset content-stream 50 50)
+;       (.setFont content-stream font font-size)
+;       (.showText content-stream "Overlay")
+;       (.endText content-stream)
+;       (.close content-stream)
+;
+;       (-> pdf (.getPages) (.getCOSObject) (.setNeedToBeUpdated true))
+;       (-> pdf (.getDocumentCatalog) (.getCOSObject) (.setNeedToBeUpdated true))
+;       (-> first (.getCOSObject) (.setNeedToBeUpdated true))
+;
+;       (let [out (clojure.java.io/output-stream out-path)]
+;          (.saveIncremental pdf out)
+;          (.close out))
+;
+;       (.close pdf)
+;       out-path))
+
