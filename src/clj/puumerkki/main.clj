@@ -20,6 +20,8 @@
            [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
            (org.apache.commons.codec.digest DigestUtils)))
 
+(def origin "https://localhost")
+
 
 ;(pdf/add-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Päivi Päättäjä")  ;; make pdf/testi.pdf-signable
 (pdf/add-watermarked-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Stephen Signer" "pdf/stamp.jpeg" 100 300)
@@ -27,13 +29,20 @@
 (def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))          ;;
 (def test-pdf-pkcs (pdf/compute-base64-pkcs test-pdf-data))       ;; to be sent to mpollux from https frontend
 
+(def authentication-challenge
+   (codec/base64-encode
+      (str origin "secretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecret")))
+
+
 
 (def js-code
 (str "var pkcs = '" test-pdf-pkcs "';
+var auth = '" authentication-challenge "';
 
-var mpolluxInfo = false;
-var mpolluxUrl  = 'https://localhost:53952';
-var signature   = false;
+var mpolluxInfo  = false;
+var mpolluxUrl   = 'https://localhost:53952';
+var signature    = false;
+var authresponse = false;
 
 function renderObject(name,exp) {
    info = name + ':<ul>';
@@ -72,22 +81,20 @@ function getVersion() {
    http.send();
 }
 
-var test1 = {'selector':{},
-             'content':pkcs,
-             'contentType':'data',
-             'hashAlgorithm':'SHA256',
-             'signatureType':'signature',
-             'version':'1.1'};
+var sigtest = {'selector':{'keyusages':['nonrepudiation']},   //     'keyalgorithms': ['rsa']
+               'content':pkcs,
+               'contentType':'data',
+               'hashAlgorithm':'SHA256',
+               'signatureType':'signature',
+               'version':'1.1'
+             };
 
-var test1x = {'selector': {
-                          'keyusages': ['digitalsignature'],   // signature fails if this is used, even though it seems to work as intended up to selection of certificate
-                          'keyalgorithms': ['rsa']
-                          },
-       'content':pkcs,
-       'contentType':'data',
-       'hashAlgorithm':'SHA256',
-       'signatureType':'signature',
-       'version':'1.1'};
+var authtest = {'selector':{'keyusages':['digitalsignature']},
+                'content':auth,
+                'contentType':'data',
+                'hashAlgorithm':'SHA256',
+                'signatureType':'signature',
+                'version':'1.1'};
 
 
 function getSignature() {
@@ -101,7 +108,6 @@ function getSignature() {
    http.overrideMimeType('application/json'); // mpollux ei lähetä, tulee muuten xml parsintavirhe
    http.onreadystatechange = function() {
      if (this.readyState == 4 && this.status == 200) {
-        console.log('About to parse: ' + this.responseText);
         signature = JSON.parse(this.responseText);
         document.getElementById('signature').innerHTML = renderObject('allekirjoitus', signature);
 
@@ -110,9 +116,9 @@ function getSignature() {
      }
    }
    http.onloadend = function () {};
-   console.log('Sending ' + JSON.stringify(test1));
+   console.log('Sending ' + JSON.stringify(sigtest));
    spinner('signature');
-   http.send(JSON.stringify(test1));
+   http.send(JSON.stringify(sigtest));
 }
 
 function sendSignature() {
@@ -141,7 +147,6 @@ function verifySignature() {
    http.onreadystatechange = function() {
      if (this.readyState == 4 && this.status == 200) {
         document.getElementById('status').innerHTML = this.response;
-        console.log(this);
      } else {
         document.getElementById('status').innerHTML = 'error';
      }
@@ -149,6 +154,39 @@ function verifySignature() {
    http.onloadend = function () {};
    spinner('status');
    http.send(JSON.stringify(signature));
+}
+
+function authenticate() {
+   var http = new XMLHttpRequest();
+   http.open('POST', mpolluxUrl + '/sign', true);
+   http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
+   http.onreadystatechange = function() {
+     if (this.readyState == 4 && this.status == 200) {
+        authresponse = JSON.parse(this.responseText);
+        // document.getElementById('authentication').innerHTML = renderObject('tunnistautuminen', authresponse);
+        sendAuth();
+     } else {
+        document.getElementById('authentication').innerHTML = 'failed (frontend)';
+     }
+   }
+   http.onloadend = function () {};
+   spinner('authentication');
+   http.send(JSON.stringify(authtest));
+}
+
+function sendAuth() {
+   var http = new XMLHttpRequest();
+   http.open('POST', '/authenticate', true);
+   http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
+   http.onreadystatechange = function() {
+     if (this.readyState == 4 && this.status == 200) {
+        document.getElementById('authentication').innerHTML = this.response;
+     } else {
+        document.getElementById('authentication').innerHTML = 'failed (backend)';
+     }
+   }
+   http.onloadend = function () {};
+   http.send(JSON.stringify(authresponse));
 }
 
 "))
@@ -171,6 +209,23 @@ function verifySignature() {
 ")
 
 
+(defn cert-givenname [cert]
+   (let [node
+         (codec/asn1-find cert
+            [:sequence [:identifier 2 5 4 4] :printable-string])]
+      (if node
+         (-> node (nth 2) (nth 1))
+         nil)))
+
+(defn cert-surname [cert]
+   (let [node
+         (codec/asn1-find cert
+            [:sequence [:identifier 2 5 4 42] :printable-string])]
+      (if node
+         (-> node (nth 2) (nth 1))
+         nil)))
+
+
 
 (defn router [req]
    ; (println "router: " req)
@@ -189,8 +244,7 @@ function verifySignature() {
 
       (= "/verify" (:uri req))
          (let [pdf-data (pdf/read-file "pdf/test-allekirjoitettu.pdf")
-               sigp (pdf/cursory-verify-signature pdf-data)
-             ]
+               sigp (pdf/cursory-verify-signature pdf-data)]
             (if sigp
                {:status 200
                 :headers {"Content-Type" "text/plain"}
@@ -200,6 +254,20 @@ function verifySignature() {
                          (clojure.pprint/pprint sigp))
                       "</pre>")
                }
+               {:status 300
+                :headers {"Content-Type" "text/plain"}
+                :body "Virhe."}))
+
+      (= "/authenticate" (:uri req))
+         (let [data (json/read-str (:body req) :key-fn keyword)
+               cert (codec/asn1-decode (codec/base64-decode-octets (first (get data :chain))))
+               fst (cert-givenname cert)
+               snd (cert-surname cert)]
+            (if (and data fst snd)
+               {:status 200
+                :headers {"Content-Type" "text/plain"}
+                :body
+                   (str "Card owner: " fst " " snd)}
                {:status 300
                 :headers {"Content-Type" "text/plain"}
                 :body "Virhe."}))
@@ -232,7 +300,13 @@ function verifySignature() {
                          "tarkasta"]]
                       [:p {:id "status"} ""]
 
+                      [:p "Tunnistautuminen: "
+                         [:button {:onClick "authenticate()"}
+                         "tunnistaudu"]]
+                      [:p {:id "authentication"} ""]
+
                       ]])}))
+
 (defn wrap-content-type [response content-type]
    (if (get-in response [:headers "Content-Type"])
       response
