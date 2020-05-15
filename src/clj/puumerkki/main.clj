@@ -2,6 +2,7 @@
   (:require
      [puumerkki.codec :as codec]
      [puumerkki.pdf :as pdf]
+     [puumerkki.crypt :as crypt]
 
      [ring.adapter.jetty :as jetty]
      [ring.middleware.params :as params]            ;; query string & body params
@@ -232,15 +233,18 @@ function sendAuth() {
    (cond
 
       (= "/sign" (:uri req))
-         (let [data (json/read-str (:body req) :key-fn keyword)
-               pdf-data (pdf/read-file "pdf/testi.pdf-signable")
-               pkcs7 (pdf/make-pkcs7 data pdf-data)
-             ]
-            (pdf/write-file! "pdf/test-allekirjoitettu.pdf"
-               (pdf/write-signature! pdf-data pkcs7))
-            {:status 200
-             :headers {"Content-Type" "text/plain"}
-             :body "OK"})
+         (let [data (json/read-str (:body req) :key-fn keyword)]
+            (if (crypt/verify (:signature data) (:chain data))
+               (let [pdf-data (pdf/read-file "pdf/testi.pdf-signable")
+                     pkcs7 (pdf/make-pkcs7 data pdf-data)]
+                  (pdf/write-file! "pdf/test-allekirjoitettu.pdf"
+                     (pdf/write-signature! pdf-data pkcs7))
+                  {:status 200
+                   :headers {"Content-Type" "text/plain"}
+                   :body "OK"})
+               {:status 400
+                :headers {"Content-Type" "text/plain"}
+                :body "Invalid signature."}))
 
       (= "/verify" (:uri req))
          (let [pdf-data (pdf/read-file "pdf/test-allekirjoitettu.pdf")
@@ -263,7 +267,7 @@ function sendAuth() {
                cert (codec/asn1-decode (codec/base64-decode-octets (first (get data :chain))))
                fst (cert-givenname cert)
                snd (cert-surname cert)]
-            (if (and data fst snd)
+            (if (and data (crypt/verify (:signature data) (:chain data)) fst snd)
                {:status 200
                 :headers {"Content-Type" "text/plain"}
                 :body
