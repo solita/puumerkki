@@ -335,6 +335,7 @@
                (let [data (.getContent ext)] ;; data to be signed
                   (.setSignature ext (byte-array 32))
                   (.close pdf))))
+      (.close sig-opts)
       output-pdf-path
       ))
 
