@@ -7,20 +7,21 @@
   (:import [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface SignatureOptions]
            [org.apache.pdfbox.pdmodel.interactive.digitalsignature.visible PDVisibleSignDesigner PDVisibleSigProperties]
            [org.apache.pdfbox.pdmodel PDDocument]
-           ;[org.apache.pdfbox.pdmodel.graphics.xobject PDPixelMap PDXObject PDJpeg]
            [org.apache.pdfbox.io RandomAccessFile]
            [org.apache.commons.io IOUtils]
            (org.apache.pdfbox.cos COSName)
            (java.security MessageDigest)
+           [java.security.cert Certificate X509Certificate]
            [java.util Calendar]
            [java.io File FileInputStream FileOutputStream ByteArrayOutputStream ByteArrayInputStream]
            (java.security.cert CertificateFactory)
            (java.security Signature)
            (org.apache.commons.codec.digest DigestUtils)
            [org.apache.pdfbox.pdmodel.font PDFont PDType1Font PDTrueTypeFont]
-           ;[org.apache.pdfbox.pdmodel.edit PDPageContentStream]
            [org.apache.pdfbox.pdmodel PDPageContentStream]
-           ))
+           [org.bouncycastle.cms.jcajce JcaSimpleSignerInfoVerifierBuilder]
+           [org.bouncycastle.cms CMSProcessableByteArray CMSSignedData]
+         ))
 
 ;; Steps
 ;;  1. (add-signature-space "your.pdf" "output.pdf" "Stephen Signer") -> create "output.pdf", has space for a signature
@@ -386,11 +387,49 @@
                            asn-ast
                            nil)))))))))
 
-; (defn verify-signature [signature-data]
-;    (let [cf (CertificateFactory/getInstance "X.509")
-;          cbarr (unsigned-seq->byte-array signature-data)]
-;       42))
-;
+;; first part of verification
+(defn partial-verify-signatures [pdf-path]
+   (try
+      (let [pdf (read-pdf pdf-path)]
+         (reduce
+            (fn [st sig]
+               (and st
+                  (let [signature-content (.getContents sig (io/input-stream pdf-path))
+                        signed-content    (.getSignedContent sig (io/input-stream pdf-path))
+                        cmsProcessableInputStream (CMSProcessableByteArray. signed-content)
+                        cmsSignedData (CMSSignedData. cmsProcessableInputStream signature-content)
+                        signerInformationStore (.getSignerInfos cmsSignedData)
+                        signers (.getSigners signerInformationStore)
+                        certs (.getCertificates cmsSignedData)]
+                     (reduce
+                        (fn [st signer]
+                           (and st
+                              (let [signer-id (.getSID signer)
+                                    certificates (.getMatches certs signer-id)]
+                                 (reduce
+                                    (fn [st signerCertificate]
+                                       (and st
+                                          (let [verifier (.build (JcaSimpleSignerInfoVerifierBuilder.) signerCertificate)]
+                                             (.verify signer verifier))))
+                                    st
+                                    certificates))))
+                       st
+                       signers))))
+            true
+            (.getSignatureDictionaries pdf)))
+      (catch Exception e
+         (println "exception: " e)
+         nil)))
+
+(defn verify-signatures [path]
+   (and
+      (partial-verify-signatures path)
+      ; check revocation lists
+      ; check signing time, or rely on verifier
+      ; fixed optional trust root?
+      ))
+
+
 ; (defn inc-update [path out-path]
 ;    (let [pdf (read-pdf path)
 ;          page (.getPage pdf 0)

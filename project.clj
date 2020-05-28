@@ -5,6 +5,7 @@
                  [pandect "0.6.1"] ;; SHA
                  ;[org.apache.pdfbox/pdfbox "1.8.16"] ;; no longer supported due to api changes required for 2.x
                  [org.apache.pdfbox/pdfbox "2.0.19"]
+                 [org.bouncycastle/bcprov-jdk15on "1.65"]
 
                  ;; for internal test server
                  [ring/ring "1.7.1"]
