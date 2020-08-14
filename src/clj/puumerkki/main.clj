@@ -1,25 +1,28 @@
 (ns puumerkki.main
-  (:require
-     [puumerkki.codec :as codec]
-     [puumerkki.pdf :as pdf]
-     [puumerkki.crypt :as crypt]
-     [pandect.algo.sha256 :refer :all]
-     [ring.adapter.jetty :as jetty]
-     [ring.middleware.params :as params]            ;; query string & body params
-     [ring.middleware.multipart-params :as mparams] ;; post body
-     [hiccup.core :refer [html]]
-     [clojure.data.json :as json])
+   (:require
+      [puumerkki.codec :as codec]
+      [puumerkki.pdf :as pdf]
+      [puumerkki.crypt :as crypt]
+      [pandect.algo.sha256 :refer :all]
+      [ring.adapter.jetty :as jetty]
+      [ring.middleware.params :as params]            ;; query string & body params
+      [ring.middleware.multipart-params :as mparams] ;; post body
+      [hiccup.core :refer [html]]
+      [clojure.data.json :as json])
 
-(:import [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface]
-         [org.apache.pdfbox.pdmodel PDDocument]
-         ;[org.apache.pdfbox.pdmodel.graphics.xobject PDPixelMap PDXObject PDJpeg]
-         [org.apache.pdfbox.io RandomAccessFile]
-         [org.apache.commons.io IOUtils]
-         (org.apache.pdfbox.cos COSName)
-         (java.security MessageDigest)
-         [java.util Calendar]
-         [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
-         (org.apache.commons.codec.digest DigestUtils)))
+   (:import
+      [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface]
+      [org.apache.pdfbox.pdmodel PDDocument]
+      ;[org.apache.pdfbox.pdmodel.graphics.xobject PDPixelMap PDXObject PDJpeg]
+      [org.apache.pdfbox.io RandomAccessFile]
+      [org.apache.commons.io IOUtils]
+      (org.apache.pdfbox.cos COSName)
+      (java.security MessageDigest)
+      [java.util Calendar]
+      [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
+      (org.apache.commons.codec.digest DigestUtils))
+
+   (:gen-class))
 
 (def origin "https://localhost")
 
@@ -29,7 +32,7 @@
 (def test-pdf-pkcs (pdf/compute-base64-pkcs test-pdf-data))       ;; to be sent to mpollux from https frontend
 
 ;; chosen by server
-(def authentication-challenge-content "secretcretseetsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecret")
+(def authentication-challenge-content "\n\nTime: 01-01-2001\nHash: sha256,b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c\n")
 
 (def full-authentication-challenge
    (str origin authentication-challenge-content))
@@ -50,6 +53,14 @@ var mpolluxUrl   = 'https://localhost:53952';
 var signature    = false;
 var authresponse = false;
 
+function toSmallString(val) {
+   let s = val + '';
+   if (s.length > 100) {
+      s = '<font size=-4>' + val + '</font>';
+   }
+   return s;
+}
+
 function renderObject(name,exp) {
    let info = name + ':<ul>';
    Object.keys(exp).forEach(function(key) {
@@ -58,15 +69,11 @@ function renderObject(name,exp) {
       if (Array.isArray(val)) {
          rep = '<ol>';
          val.forEach(function(val) {
-            rep += '<li>' + val;
+            rep += '<li>' + toSmallString(val);
          });
          rep += '</ol>';
       } else {
-         if (val.length > 100) {
-            rep = '<font size=-4>' + val + '</font>';
-         } else {
-            rep = '' + val;
-         }
+         rep = toSmallString(val);
       }
       info += '<li>' + key + ': ' + rep;
    });
@@ -95,6 +102,21 @@ function getVersion() {
    }
    http.onloadend = function () {};
    spinner('mpollux');
+   http.send();
+}
+
+function loadCAs() {
+   var http = new XMLHttpRequest();
+   http.open('GET', '/load-cas');
+
+   http.onreadystatechange = function() {
+     if (this.readyState == 4 && this.status == 200) {
+        document.getElementById('cas').innerHTML = this.responseText;
+     } else {
+        console.log('status ' + this.readyState);
+     }
+   }
+   spinner('cas');
    http.send();
 }
 
@@ -281,14 +303,29 @@ function sendAuth() {
                {:status 200
                 :headers {"Content-Type" "text/plain"}
                 :body
-                   (str "OK: <pre>"
+                   (str "OK: <div>"
                       (with-out-str
-                         (clojure.pprint/pprint sigp))
-                      "</pre>")
+                         ; (clojure.pprint/pprint sigp)
+                         (println sigp)
+                         )
+                      "</div>")
                }
                {:status 300
                 :headers {"Content-Type" "text/plain"}
                 :body "Virhe."}))
+
+      (= "/load-cas" (:uri req))
+         (do
+            (crypt/add-trust-roots! "trust-roots.pem")
+            {:status 200
+             :headers {"Content-Type" "text/html"}
+             :body
+                (str "<ul>"
+                   (reduce
+                      (fn [tail cert]
+                         (str "<li>" (crypt/cert-name cert) tail))
+                      "</ul>"
+                      @crypt/a-signature-trust-roots))})
 
       (= "/authenticate" (:uri req))
          (let [data (json/read-str (:body req) :key-fn keyword)]
@@ -311,18 +348,22 @@ function sendAuth() {
                       [:style  style]
                       [:meta {:charset "UTF-8"}]]
                    [:body
+
                       [:p "Digisign version haku: "
                          [:button {:onClick "getVersion()"}
                          "hae"]]
                       [:p {:id "mpollux"} ""]
+
                       [:p "Allekirjoituksen teko kortilla: "
                          [:button {:onClick "getSignature()"}
                          "allekirjoita"]]
                       [:p {:id "signature"} ""]
+
                       [:p "Allekirjoituksen tallennus pdf:ään: "
                          [:button {:onClick "sendSignature()"}
                          "lähetä"]]
                       [:p {:id "sent"} ""]
+
                       [:p "Allekirjoituksen varmistus pdf:stä: "
                          [:button {:onClick "verifySignature()"}
                          "tarkista"]]
@@ -332,6 +373,12 @@ function sendAuth() {
                          [:button {:onClick "authenticate()"}
                          "tunnistaudu"]]
                       [:p {:id "authentication"} ""]
+
+                      [:p "Varmenteet: "
+                         [:button {:onClick "loadCAs()"}
+                         "lataa"]]
+                      [:p {:id "cas"} ""]
+
 
                       ]])}))
 
@@ -353,14 +400,39 @@ function sendAuth() {
       (wrap-body-string)
       ))
 
-(def jetty-opts
+(def default-opts
    {:port 3000
     :join false
     :host "localhost"})
 
+(defn start [opts]
+   (jetty/run-jetty app
+      (select-keys opts [:port :join :host])))
+
 (defn go []
-   (jetty/run-jetty app jetty-opts))
+   (start default-opts))
+
+(defn handle-args [opts args]
+   (cond
+      (empty? args)
+         (start opts)
+      (contains? #{"-h" "--help"} (first args))
+         (do
+            (println "Usage: java -jar puumerkki.jar [-h] [-t|--trust-roots <pemfile>]")
+            0)
+      (and (contains? #{"-t" "--trust-roost"} (first args)) (not (empty? (rest args))))
+         (do
+            (crypt/add-trust-roots! (second args))
+            (handle-args opts (rest (rest args))))
+      :else
+         (do
+            (println "Invalid arguments: " args ". Use -h for help.")
+            nil)))
 
 (defn -main [& args]
-   (jetty/run-jetty app jetty-opts))
+   (try
+      (handle-args default-opts args)
+      (catch Exception e
+         (println "ERROR: " e)
+         1)))
 

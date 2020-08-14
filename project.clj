@@ -19,6 +19,7 @@
   :source-paths ["src/clj" "src/cljc"]
   :test-paths ["test"]
   :resource-paths []
+  :aot :all
 
   :main puumerkki.main
 )

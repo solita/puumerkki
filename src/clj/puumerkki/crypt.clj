@@ -14,32 +14,127 @@
      (sun.security.x509 CRLDistributionPointsExtension)
      ))
 
-;; signing cert
-(defn chain->cert [chain]
+(def a-signature-trust-roots (atom nil))
+
+(def b64->bytes
+   (comp byte-array
+         codec/base64-decode-octets))
+
+(defn bytes->cert [bytes]
    (try
-      (let [cert-str (first chain)
-            cert-bytes (byte-array (codec/base64-decode-octets cert-str))
-            cf (CertificateFactory/getInstance "X.509")]
-          (.generateCertificate cf (io/input-stream cert-bytes)))
+      (let [cf (CertificateFactory/getInstance "X.509")]
+          (.generateCertificate cf (io/input-stream bytes)))
       (catch Exception e
          ; (println "ERROR: chain->cert: " e)
-         false)))
+         nil)))
+
+
+(defn read-cert [cf instr]
+   (if (.available instr)
+      (try
+         (.generateCertificate cf instr)
+         (catch Exception e
+            ; (println "ERROR reading certificates: " e)
+            nil))
+      nil))
+
+(defn pem-file->certs [path]
+   (try
+      (let [stream (io/input-stream path)
+            cf (CertificateFactory/getInstance "X.509")]
+            (loop [certs nil]
+               (let [cert (read-cert cf stream)]
+                  (if cert
+                     (recur (cons cert certs))
+                     certs))))
+      (catch Exception e
+         nil)))
+
+
+(defn cert-name [cert]
+   (try
+      (.getName (.getSubjectDN cert))
+      (catch Exception e
+         (println "EXCEPTION " e)
+         "(bad cert)")))
+
+(defn trusted-cert? [cert]
+   (reduce
+      (fn [is ca]
+         (or is (.equals ca cert)))
+      false @a-signature-trust-roots))
+
+;; -> added-something?
+(defn add-trust-roots! [pem-path]
+   (println "Loading signature trust roots from " pem-path)
+   (let [certs (pem-file->certs pem-path)]
+      (if (empty? certs)
+         (do
+            (println "ERROR: Failed to load certs from " pem-path)
+            false)
+         (reduce
+            (fn [added? cert]
+               (if (trusted-cert? cert)
+                  (do
+                     (println "NOTE: skipping already trusted cert " (cert-name cert))
+                     added?)
+                  (do
+                     (println "NOTE: Adding trusted cert " (cert-name cert))
+                     (reset! a-signature-trust-roots
+                        (cons cert @a-signature-trust-roots))
+                     true)))
+               false certs))))
+
+
+(def b64->cert
+   (comp bytes->cert
+         b64->bytes))
+
+(def chain->signing-cert
+   (comp b64->cert first))
 
 (defn cert->pubkey [cert]
    (if cert (.getPublicKey cert)))
 
-(defn chain->pubkey [chain]
-   (if-let [cert (chain->cert chain)]
-      (cert->pubkey cert)))
-
-(defn signature-validity [errs pub sig-s data]
-   (let [verifier (Signature/getInstance "SHA256withRSA")   ; <- type requested by us
-         signature (byte-array (codec/base64-decode-octets sig-s))]
+(defn signature-validity [errs pub signature type data]
+   (let [verifier (Signature/getInstance type)]   ; <- type requested by us
       (.initVerify verifier pub)
-      (.update verifier (.getBytes data))
+      (.update verifier data)
       (if (.verify verifier signature)
          errs
          (cons :signature-not-valid errs))))
+
+(defn b64-cert->pem [b]
+   (str "-----BEGIN CERTIFICATE-----\n"
+      (clojure.string/replace b #"([^\n]{80})" "$1\n") ;; for readability
+      "\n-----END CERTIFICATE-----\n"))
+
+(defn anchor-cert-validity [errs b64cert]
+   (let [cert (b64->cert b64cert)]
+      ;; can use a provided trust root, system default trust store, fixed key, etc
+      (println "NOTE: placeholder trust root verification. accepting " (.getSubjectDN cert))
+      errs))
+
+(defn chain-validity [errs certs]
+   (cond
+      (nil? certs)
+         (cons :invalid-certificate-chain errs)
+      (empty? (rest certs))
+         errs ;; root cert is checked elsewhere
+      :else
+         (let [sub (first certs)       ;; the chain is complete and in order
+               issuer (second certs)]
+            (try
+               (do
+                  ; (println "debug: validating cert chain at " (.getIssuerDN sub) " <- " (.getSubjectDN issuer))
+                  (.verify sub (cert->pubkey issuer))
+                  (chain-validity errs (rest certs)))
+               (catch Exception e
+                  ;; could accidentally leak sensitive data to log if this is e.g. the signing
+                  ;; certificate and error results from card reader application failure or
+                  ;; unexpected change in its operation.
+                  ; (println "ERROR: certificate chain validation failed for certificate: " sub)
+                  (cons :invalid-certificate-chain errs))))))
 
 ;; exception -> boolean
 (defn cert-validity [errs cert]
@@ -47,29 +142,40 @@
       (.checkValidity cert)
       errs
       (catch Exception e
-         (cons :cert-not-valid errs))))
+         ; (cons :cert-not-valid errs)
+         ;; need to order new test cards
+         (println "WARNING: certificate not valid, but allowing it")
+         errs)))
 
-;; partial version
+(defn cert-revocation-status [errs cert]
+   (println "NOTE: No CRL/OCSP handling yet. Allowing cert.")
+   errs)
+
+;; -> nil = ok, list of error symbols otherwise
 (defn validation-errors [sig-b64s msg-string chain]
-   (let [cert (chain->cert chain)
-         pub  (cert->pubkey cert)]
-      (cond
-         (not cert)
-            (list :cannot-read-certificate)
-         (not pub)
-            (list :cannot-read-public-key)
-         :else
-            (-> nil
-               (cert-validity cert)
-               (signature-validity pub sig-b64s msg-string)
-               ; trust chain
-               ; revocation via crl/ocsp
-               ))))
+   (try
+      (let [cert (chain->signing-cert chain)
+            pub  (cert->pubkey cert)]
 
-;; You probably want to call validation errors instead to be able to log/report the reasons
+         (cond
+            (not cert)
+               (list :cannot-read-certificate)
+            (not pub)
+               (list :cannot-read-public-key)
+            :else
+               (-> nil
+                  (cert-validity cert)          ;; validity time, relies on computer clock
+                  (cert-revocation-status cert) ;; CRL distribution point known, no loading and check yet
+                  (signature-validity pub (b64->bytes sig-b64s) "SHA256withRSA" (.getBytes msg-string))
+                  (chain-validity (map b64->cert chain))
+                  (anchor-cert-validity (last chain))
+                  )))
+      (catch Exception e
+         (list :validation:error))))
+
+;; You probably want to call validation-errors instead to be able to log/report the reasons
 (defn valid? [sig-b64s msg-string chain]
-   (let [errs (validation-errors sig-b64s msg-string chain)]
-      (empty? errs)))
+   (empty? (validation-errors sig-b64s msg-string chain)))
 
 (defn n-bits [num]
    (loop [n 0 h 1]
@@ -93,7 +199,7 @@
                (seq (.getExtensionValue cert "2.5.29.31"))))
          1)
       (catch Exception e
-         (println "ERROR: failed to find CRL source from cert with serial" (.getSerialNumber cert))
+         (println "ERROR: failed to find CRL source from cert " (cert-name cert))
          nil)))
 
 (defn crl-distribution-points [cert]
@@ -123,7 +229,7 @@
    (let [errs (validation-errors sig-b64s msg-string chain)]
       (if (empty? errs)
          (cert->signer-info
-            (chain->cert chain))
+            (chain->signing-cert chain))
          (do
             (println "ERRORS: " errs)
             nil))))
