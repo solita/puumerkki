@@ -284,17 +284,24 @@ function sendAuth() {
 
       (= "/sign" (:uri req))
          (let [data (json/read-str (:body req) :key-fn keyword)]
-            (if true ; (crypt/valid? (:signature data) nil (:chain data))
+            (if-let
+               [errs
+                  (crypt/validation-errors
+                     (:signature data)
+                     (byte-array (codec/base64-decode-octets test-pdf-pkcs))
+                     (:chain data))]
+               (do
+                  (println "Signature failure: " errs)
+                  {:status 400
+                   :headers {"Content-Type" "text/plain"}
+                   :body (str "Invalid signature: " errs)})
                (let [pdf-data (pdf/read-file "pdf/testi.pdf-signable")
                      pkcs7 (pdf/make-pkcs7 data pdf-data)]
                   (pdf/write-file! "pdf/test-allekirjoitettu.pdf"
                      (pdf/write-signature! pdf-data pkcs7))
                   {:status 200
                    :headers {"Content-Type" "text/plain"}
-                   :body "OK"})
-               {:status 400
-                :headers {"Content-Type" "text/plain"}
-                :body "Invalid signature."}))
+                   :body "OK"})))
 
       (= "/verify" (:uri req))
          (let [pdf-data (pdf/read-file "pdf/test-allekirjoitettu.pdf")

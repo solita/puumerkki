@@ -58,7 +58,7 @@
          (println "EXCEPTION " e)
          "(bad cert)")))
 
-(defn trusted-cert? [cert]
+(defn trusted-root-cert? [cert]
    (reduce
       (fn [is ca]
          (or is (.equals ca cert)))
@@ -74,7 +74,7 @@
             false)
          (reduce
             (fn [added? cert]
-               (if (trusted-cert? cert)
+               (if (trusted-root-cert? cert)
                   (do
                      (println "NOTE: skipping already trusted cert " (cert-name cert))
                      added?)
@@ -85,6 +85,8 @@
                      true)))
                false certs))))
 
+(defn string->bytes [s]
+   (.getBytes s))
 
 (def b64->cert
    (comp bytes->cert
@@ -111,9 +113,9 @@
 
 (defn anchor-cert-validity [errs b64cert]
    (let [cert (b64->cert b64cert)]
-      ;; can use a provided trust root, system default trust store, fixed key, etc
-      (println "NOTE: placeholder trust root verification. accepting " (.getSubjectDN cert))
-      errs))
+      (if (trusted-root-cert? cert)
+         errs
+         (cons :untrusted-root-cert errs))))
 
 (defn chain-validity [errs certs]
    (cond
@@ -152,7 +154,7 @@
    errs)
 
 ;; -> nil = ok, list of error symbols otherwise
-(defn validation-errors [sig-b64s msg-string chain]
+(defn validation-errors [sig-b64s msg-bytes chain]
    (try
       (let [cert (chain->signing-cert chain)
             pub  (cert->pubkey cert)]
@@ -166,7 +168,7 @@
                (-> nil
                   (cert-validity cert)          ;; validity time, relies on computer clock
                   (cert-revocation-status cert) ;; CRL distribution point known, no loading and check yet
-                  (signature-validity pub (b64->bytes sig-b64s) "SHA256withRSA" (.getBytes msg-string))
+                  (signature-validity pub (b64->bytes sig-b64s) "SHA256withRSA" msg-bytes)
                   (chain-validity (map b64->cert chain))
                   (anchor-cert-validity (last chain))
                   )))
@@ -175,7 +177,9 @@
 
 ;; You probably want to call validation-errors instead to be able to log/report the reasons
 (defn valid? [sig-b64s msg-string chain]
-   (empty? (validation-errors sig-b64s msg-string chain)))
+   (let [errs (validation-errors sig-b64s (string->bytes msg-string) chain)]
+      (println "DEBUG: validation errors " errs)
+      (empty? errs)))
 
 (defn n-bits [num]
    (loop [n 0 h 1]
@@ -223,16 +227,12 @@
     :crl-points (crl-distribution-points cert)
     })
 
-
 ;; -> nil if signature is invalid | map of signing certificate information
 (defn signer-info [sig-b64s msg-string chain]
-   (let [errs (validation-errors sig-b64s msg-string chain)]
+   (let [errs (validation-errors sig-b64s (string->bytes msg-string) chain)]
       (if (empty? errs)
          (cert->signer-info
             (chain->signing-cert chain))
          (do
             (println "ERRORS: " errs)
             nil))))
-
-
-
