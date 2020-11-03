@@ -13,6 +13,7 @@
                  [ring/ring-core "1.6.3"]
                  [ring/ring-defaults "0.3.2"]
                  [hiccup "1.0.5"]
+                 [clj-http "0.7.7"]
                  [ring/ring-jetty-adapter "1.6.3"]
                  [org.clojure/data.json "1.0.0"]]
 
