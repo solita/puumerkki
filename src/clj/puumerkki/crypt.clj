@@ -1,6 +1,7 @@
 (ns puumerkki.crypt
   (:require
      [puumerkki.codec :as codec]
+     [puumerkki.pdf :as pdf]
      [clojure.java.io :as io]
      [clojure.string :as str])
   (:import
@@ -134,11 +135,12 @@
       errs
       (catch Exception e
          ; (cons :cert-not-valid errs)
-         ;; need to order new test cards
-         ; (println "WARNING: certificate not currently valid, but allowing it while testing")
-         errs)))
+         errs
+         )))
 
 (defn cert-revocation-status [errs cert]
+   ;; will likely need a both cert-provided checks and a custom one not relying
+   ;; on direct connections to CRL endpoints at time of checks.
    (println "WARNING: No CRL/OCSP handling yet.")
    errs)
 
@@ -207,8 +209,9 @@
     :not-after (.getTime (.getNotAfter cert))
     :not-before (.getTime (.getNotBefore cert))
     :givenname (.getGivenName (.getSubjectDN cert))
-    :surname (.getGivenName (.getSubjectDN cert))
+    :surname (.getSurname (.getSubjectDN cert))
     :commonname (.getCommonName (.getSubjectDN cert))
+    ;:unique-id (.getSubjectUniqueID cert)
     :algorithm (.getAlgorithm (.getPublicKey cert))
     :key-size (rsa-key-size (.getPublicKey cert))     ; nil for non-rsa (EC)
     :crl-points (crl-distribution-points cert)
@@ -220,7 +223,9 @@
       (if (empty? errs)
          (cert->signer-info
             (chain->signing-cert chain))
-         false)))
+         (do
+            (println "signer-info: got errs " errs)
+            false))))
 
 ;; a variable data is usually a hash of the data/document/event.
 ;; host prefix is added later.
@@ -246,6 +251,15 @@
           \"hashAlgorithm\":\"SHA256\",
           \"signatureType\":\"signature\",
           \"version\":\"1.1\"}")))
+
+(defn pdf-sign-request [version pdf-data]
+   (let [pkcs (pdf/compute-base64-pkcs pdf-data)]
+      (str "{\"selector\":{\"keyusages\":[\"nonrepudiation\"]},
+             \"content\":\"" (pdf/compute-base64-pkcs pdf-data) "\",
+             \"contentType\":\"data\",
+             \"hashAlgorithm\":\"SHA256\",
+             \"signatureType\":\"signature\",
+             \"version\":\"1.1\"}")))
 
 (defn verify-authentication-challenge [roots secret signature challenge maybe-payload]
    (let [[_ hmac timestamp data] (re-find #"^https://[^\n]+\n([0-9a-f]+)\n([0-9]+)\n(.*)" challenge)]

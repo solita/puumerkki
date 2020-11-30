@@ -21,6 +21,7 @@
            [org.apache.pdfbox.pdmodel PDPageContentStream]
            [org.bouncycastle.cms.jcajce JcaSimpleSignerInfoVerifierBuilder]
            [org.bouncycastle.cms CMSProcessableByteArray CMSSignedData]
+           [org.bouncycastle.pkix.jcajce X509RevocationChecker]
          ))
 
 ;; Steps
@@ -94,9 +95,7 @@
                (aset-byte array (+ offset pos) (aget content pos))
                (recur (- pos 1)))
             array))
-      (do
-         (println "ERROR: copy-bytes: byte array size " (count content) ", target data at " offset " of length " (count content) ". Unpossible.")
-         nil)))
+      nil))
 
 ;; data-bvec offset pattern-vec → false | offset+length(pattern-vec)
 (defn vector-match-at [data offset pattern]
@@ -303,8 +302,7 @@
       output-pdf-path)
       (catch Exception e
          ;; log reason
-         ;; todo: since there are various logging systems in use, pass handlers optionally here?
-         (println "ERROR: " e)
+         ; add optoinal error logger
          nil)))
 
 (defn add-watermarked-signature-space [pdf-path output-pdf-path signer-name image-path x y]
@@ -418,9 +416,9 @@
             true
             (.getSignatureDictionaries pdf)))
       (catch Exception e
-         (println "exception: " e)
          nil)))
 
+;; switch to new validation via .crypt
 (defn verify-signatures [path]
    (and
       (partial-verify-signatures path)
@@ -428,38 +426,4 @@
       ; check signing time, or rely on verifier
       ; fixed optional trust root?
       ))
-
-
-; (defn inc-update [path out-path]
-;    (let [pdf (read-pdf path)
-;          page (.getPage pdf 0)
-;          font
-;             org.apache.pdfbox.pdmodel.font.PDType1Font/HELVETICA
-;             ; org.apache.pdfbox.pdmodel.font.PDType1Font/TIMES_ROMAN
-;          font-size 14
-;          catalog (.getDocumentCatalog pdf)
-;          pages (.getPages catalog) ;; no longer getAllPages
-;          first (.get pages 0)
-;          content-stream
-;             (PDPageContentStream. pdf first
-;                true  ;; append
-;                false ;; compress
-;                )]
-;       (.beginText content-stream)
-;       (.newLineAtOffset content-stream 50 50)
-;       (.setFont content-stream font font-size)
-;       (.showText content-stream "Overlay")
-;       (.endText content-stream)
-;       (.close content-stream)
-;
-;       (-> pdf (.getPages) (.getCOSObject) (.setNeedToBeUpdated true))
-;       (-> pdf (.getDocumentCatalog) (.getCOSObject) (.setNeedToBeUpdated true))
-;       (-> first (.getCOSObject) (.setNeedToBeUpdated true))
-;
-;       (let [out (clojure.java.io/output-stream out-path)]
-;          (.saveIncremental pdf out)
-;          (.close out))
-;
-;       (.close pdf)
-;       out-path))
 

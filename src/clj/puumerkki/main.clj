@@ -7,6 +7,7 @@
       [ring.adapter.jetty :as jetty]
       [ring.middleware.params :as params]            ;; query string & body params
       [ring.middleware.multipart-params :as mparams] ;; post body
+      [ring.middleware.cookies :as rookies]
       [hiccup.core :refer [html]]
       [clj-http.client :as http]
       [clojure.data.json :as json])
@@ -40,293 +41,16 @@
 
 (def origin "https://localhost")
 
-(pdf/add-watermarked-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Stephen Signer" "pdf/stamp.jpeg" 100 300)
-
-(def test-pdf-data (pdf/read-file "pdf/testi.pdf-signable"))      ;;
-
 (defn authentication-hash [data]
    (sha256-bytes data))
 
 (def auth-payload "8fe85f31aa6fa5ff4e5cb7d03497e9a78c0f8492ec2da21279adedbc312976cf")
 
-(defonce a-js-code (atom nil))
-(defn make-js-code []
+(def app-js
+   (slurp "res/app.js"))
 
-(str "
-var mpolluxInfo  = false;
-var mpolluxUrl   = 'https://localhost:53952';
-var signature    = false;
-var authresponse = false;
-
-function toSmallString(val) {
-   let s = val + '';
-   if (s.length > 100) {
-      s = '<font size=-4>' + val + '</font>';
-   }
-   return s;
-}
-
-function showMe(e, text) {
-   e.innerHTML = text;
-   e.style.display = 'inline-block';
-}
-
-function clearMe(e) {
-   e.innerHTML = '';
-   e.style.display = 'none';
-}
-
-function showId(id, text) {
-   let elem = document.getElementById(id);
-   if (elem) {
-      showMe(elem, text);
-   } else {
-      console.log('cannot find object with id ' + id);
-   }
-}
-
-function showIdSpin(id, text) {
-   showId(id, text + ' <div class=spinner></div>');
-}
-
-function renderObject(name,exp) {
-   let info = name + ':<ul>';
-   Object.keys(exp).forEach(function(key) {
-      let val = exp[key];
-      let rep;
-      if (Array.isArray(val)) {
-         rep = '<ol>';
-         val.forEach(function(val) {
-            rep += '<li>' + toSmallString(val);
-         });
-         rep += '</ol>';
-      } else {
-         rep = toSmallString(val);
-      }
-      info += '<li>' + key + ': ' + rep;
-   });
-   info += '</ul>'
-   return info;
-}
-
-
-// reloads each time without caching, so that we'll see whether digisign is
-// alive at frontend before attempting to use it
-function getVersion(target, cont) {
-   let http = new XMLHttpRequest();
-   http.open('GET', mpolluxUrl + '/version');
-   http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
-   http.overrideMimeType('application/json'); // avoid xml parsing error due to missing mime type
-
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        mpolluxInfo = JSON.parse(this.responseText);
-        if (cont) {
-           cont(target, mpolluxInfo);
-        } else {
-           showId(target, renderObject('versiotiedot', mpolluxInfo));
-        }
-     } else {
-        showId(target, 'Digisign ei käytettävissä');
-     }
-   }
-   http.timeout = 2000;
-   showId(target, 'yhdistetään digisigniin');
-   http.send();
-}
-
-function loadCAs() {
-   var http = new XMLHttpRequest();
-   http.open('GET', 'load-cas');
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        showId('cas', this.responseText);
-     } else {
-        showId('cas', 'error');
-     }
-   }
-   showIdSpin('cas');
-   http.send();
-}
-
-function makeSignature(target, request) {
-   var http = new XMLHttpRequest();
-   http.open('POST', mpolluxUrl + '/sign', true);
-   http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
-   http.overrideMimeType('application/json');
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        signature = JSON.parse(this.responseText);
-        sendSignature(target, signature); // + request w/ hmac later to avoid backend state
-     } else {
-        showId(target, 'failed');
-     }
-   }
-   showIdSpin(target, 'allekirjoitetaan kortilla');
-   http.send(JSON.stringify(request));
-}
-
-function sendSignature(target, signature) {
-   var http = new XMLHttpRequest();
-   http.open('POST', 'sign', true);
-   http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        verifySignature(target);
-     } else {
-        showId(target, 'failed');
-     }
-   }
-   showIdSpin(target, 'lähetetään');
-   http.send(JSON.stringify(signature));
-}
-
-function verifySignature(target) {
-   var http = new XMLHttpRequest();
-   http.open('GET', 'verify', true);
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        showId(target, 'OK'); // this.response
-     } else {
-        showId(target, 'allekirjoitusta ei hyväksytä');
-     }
-   }
-   showIdSpin(target, 'varmistetaan allekirjoitus');
-   http.send(JSON.stringify(signature));
-}
-
-function sendAuth(target, response, challenge) {
-   var http = new XMLHttpRequest();
-   http.open('POST', 'authenticate', true);
-   http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        let signerInfo = JSON.parse(this.responseText);
-        showId(target, renderObject('Käyttäjä tunnistettu',  signerInfo));
-     } else {
-        showId(target, 'failed (backend)');
-     }
-   }
-   response['signedData'] = challenge; // return to backend for verification
-   showId(target, 'lähetetään tiedot');
-   http.send(JSON.stringify(response));
-}
-
-function authenticate(target, challenge) {
-   var http = new XMLHttpRequest();
-   http.open('POST', mpolluxUrl + '/sign', true);
-   http.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        authresponse = JSON.parse(this.responseText);
-        if (authresponse.status == 'ok') {
-           sendAuth(target, authresponse, challenge);
-        } else {
-           showId(target, 'failed (card)');
-        }
-     } else {
-        showId(target, 'failed (digisign)');
-     }
-   }
-   showId(target, 'toimikortti');
-   http.send(JSON.stringify(challenge));
-}
-
-function getAuthChallenge(target, version) {
-   let args = {};
-   let http = new XMLHttpRequest();
-   http.open('POST', 'auth-challenge', true);
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        authenticate(target, JSON.parse(this.responseText));
-     } else {
-        showId(target, 'failed (backend challenge)');
-     }
-   }
-   showId(target, 'starting authentication');
-   args.host = window.location.hostname;
-   args.version = version;
-   args.url = mpolluxUrl;
-   args.type = 'digisign'; // for future extension
-   http.send(JSON.stringify(args));
-}
-
-function startAuthentication() {
-   if (location.protocol !== \"https:\") {
-      alert('must authenticate over https');
-      return;
-   }
-   getVersion('authentication', getAuthChallenge);
-}
-
-function getPdfSignRequest(target, version) {
-   let args = {};
-   let http = new XMLHttpRequest();
-   http.open('POST', 'pre-sign', true);
-   http.onreadystatechange = function() {
-     if (this.readyState != 4) return;
-     if (this.status == 200) {
-        makeSignature(target, JSON.parse(this.responseText));
-     } else {
-        showId(target, 'pre-sign');
-     }
-   }
-   args.host = window.location.hostname;
-   args.version = version;
-   args.url = mpolluxUrl;
-   args.type = 'digisign'; // for future extension
-   showIdSpin(target, 'haetaan tiedot allekirjoitusta varten');
-   http.send(JSON.stringify(args));
-}
-
-function startSigning(target) {
-   if (location.protocol !== \"https:\") {
-      alert('can only sign via https');
-      return;
-   }
-   showIdSpin(target, 'aloitetaan');
-   getVersion(target, getPdfSignRequest);
-}
-
-"))
-
-(def style
-"
-body {
-   padding: 20px;
-}
-h1 {
-   padding-above: 20px;
-}
-.result {
-   margin-left: 30px;
-   padding: 20px;
-   border: solid black 1px;
-   display: none;
-}
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: solid black 1px;
-  animation-name: spin;
-  display: flex;
-  animation-duration: 2000ms;
-  animation-iteration-count: infinite;
-  animation-timing-function: linear;
-}
-@keyframes spin {
-  from {transform:rotate(0deg);}
-  to {transform:rotate(360deg);}
-}
-")
+(def app-css
+   (slurp "res/app.css"))
 
 (defn cert-givenname [cert]
    (let [node
@@ -346,17 +70,10 @@ h1 {
 
 (defn log-halko [& what]
    (future
-      (http/post "http://localhost:3001/log"
-         {:form-params {:service "puumerkki" :msg (apply str what)}})))
-
-(defn pdf-sign-request [version]
-   (let [pkcs (pdf/compute-base64-pkcs test-pdf-data)]
-      (str "{\"selector\":{\"keyusages\":[\"nonrepudiation\"]},
-             \"content\":\"" (pdf/compute-base64-pkcs test-pdf-data) "\",
-             \"contentType\":\"data\",
-             \"hashAlgorithm\":\"SHA256\",
-             \"signatureType\":\"signature\",
-             \"version\":\"1.1\"}")))
+      (println "Log: " what)
+      ;(http/post "http://localhost:3001/log"
+      ;   {:form-params {:service "puumerkki" :msg (apply str what)}})
+      ))
 
 (defn fold [o s l]
    (if (empty? l)
@@ -372,8 +89,60 @@ h1 {
             (cons elem tail)))
       nil seq))
 
+; (pdf/add-watermarked-signature-space "pdf/testi.pdf" "pdf/testi.pdf-signable" "Stephen Signer" "pdf/stamp.jpeg" 100 300)
+
+;; micro authorization
+
+(defn signer->authorized-user [signer]
+   {:name (str (:givenname signer) " " (:surname signer))
+    :id 42
+    :roles ["user" "admin"]})
+
+;; micro session management
+
+(def session-timeout-seconds 30)
+
+(defn posix-time []
+   (quot (System/currentTimeMillis) 1000))
+
+
+(defn sign-cookie-map [cookie-map]
+   (let [data (json/write-str cookie-map)]
+      (str (crypt/hmac-sign @auth-secret data) "," data)))
+
+;; user cookie has expiration + signature
+(defn signer->user-cookie [signer]
+   (sign-cookie-map
+      (-> (signer->authorized-user signer)
+         (assoc :expires
+            (+ (posix-time) session-timeout-seconds)))))
+
+(defn user-cookie->user-map [cookie]
+   (let [[_ hmac data] (re-find #"^([0-9a-f]+),(.*)" (or (:value cookie) ""))]
+      ;; temporal hardening and renewal here later
+      (if (and hmac data
+               (= hmac (crypt/hmac-sign @auth-secret data)))
+         (let [map (json/read-str data :key-fn keyword)
+               now (posix-time)]
+            (cond
+               (< (:expires map) now)
+                  nil
+               :else
+                  map))
+         nil)))
+
+(defn wrap-user-data [handler]
+   (fn [req]
+      (if-let [user-map (user-cookie->user-map (get (:cookies req) "puumerkki"))]
+         (handler (assoc req :puumerkki user-map))
+         (handler req))))
+
+(def http-ok 200)
+(def http-ok-no-content 204)
+
 (defn router [req]
-   (log-halko (:uri req))
+   (try
+   (log-halko "req <- " (:uri req))
 
    (cond
 
@@ -381,27 +150,28 @@ h1 {
 
       (= "/sign" (:uri req))
          (let [data (json/read-str (:body req) :key-fn keyword)]
+            (log-halko "signing")
             (if-let
                [errs
                   (remove
-                     (partial = :signature-not-valid) ;; test cards currently not valid
+                     ;; test cards currently not valid (expired)
+                     (partial = :cert-not-valid)
                      (crypt/validation-errors
                         @trust-roots
                         (:signature data)
                         (byte-array
-                           ; (codec/base64-decode-octets test-pdf-pkcs)
-                           (list)
-                           )
+                           (codec/base64-decode-octets (:content (:request data))))
                         (:chain data)))]
                (do
                   (log-halko "PDF signature failure: " errs)
                   {:status 400
                    :headers {"Content-Type" "text/plain"}
                    :body (str "Invalid signature: " errs)})
-               (let [pdf-data (pdf/read-file "pdf/testi.pdf-signable")
+               (let [pdf-data
+                        (pdf/read-file "pdf/testi.pdf-signable")
                      pkcs7 (pdf/make-pkcs7 data pdf-data)]
                   ;; crossvalidate pdf with signature later
-                  (log-halko "PDF signed")
+                  (log-halko "PDF PKCS done")
                   (pdf/write-file! "pdf/test-allekirjoitettu.pdf"
                      (pdf/write-signature! pdf-data pkcs7))
                   {:status 200
@@ -428,11 +198,29 @@ h1 {
                 :body "Virhe."}))
 
       (= "/pre-sign" (:uri req))
-         (let [req (json/read-str (:body req) :key-fn keyword)]
-            (let [request (pdf-sign-request (get req :version {}))]
-               {:status 200
-                :headers {"Content-Type" "application/json"}
-                :body request}))
+         (let [req (json/read-str (:body req) :key-fn keyword)
+               preparation-res  ;; construct the signable version
+                  (pdf/add-watermarked-signature-space
+                     "pdf/testi.pdf"
+                     "pdf/testi.pdf-signable-x"
+                     "Stephen Signer"
+                     "pdf/stamp.jpeg"
+                     100 300)]
+            (if preparation-res
+               (let [pdf-data
+                        (pdf/read-file "pdf/testi.pdf-signable")
+                        ; (pdf/read-file "pdf/testi.pdf")
+
+                     request (crypt/pdf-sign-request (get req :version {}) pdf-data)]
+                  ;; pdf signature request does not need to be signed, because
+                  ;; validating it involves recomputing and validating the hash
+                  ;; of the document to be signed
+                  (log-halko "PDF signing preparation request for " (:version req))
+                  {:status 200
+                   :headers {"Content-Type" "application/json"}
+                   :body request})
+               {:status 500
+                :body "This PDF cannot be signed."}))
 
       ;; Authentication
 
@@ -443,11 +231,17 @@ h1 {
 
             (let [signer (and data (crypt/verify-authentication-challenge @trust-roots @auth-secret data challenge auth-payload))]
                (if signer
-                  (do
+                  (let [user-token (signer->user-cookie signer)]
                      (log-halko (if signer "/authenticate OK" "/authenticate FAILED"))
+                     (log-halko signer)
                      {:status 200
                       :headers {"Content-Type" "text/plain"}
-                      :body (json/write-str signer)})
+                      :cookies
+                         {"puumerkki" {:value user-token
+                                       :secure true
+                                       :http-only true
+                                       :same-site :strict}}
+                      :body (json/write-str (signer->authorized-user signer))})
                   (do
                      (log-halko "/authenticate failed")
                      {:status 300
@@ -467,6 +261,13 @@ h1 {
                 :headers {"Content-Type" "application/json"}
                 :body request}))
 
+      (= "/session" (:uri req))
+         (if-let [info (get req :puumerkki)]
+            {:status http-ok
+             :headers {"Content-type" "application/json"}
+             :body (json/write-str info)}
+            {:status http-ok-no-content
+             :body "no session"})
 
       ;; Meta
 
@@ -484,8 +285,12 @@ h1 {
                       "</ul>"
                       @trust-roots))})
 
+
       ;; Test page
 
+      ;; header, top of page
+      ;; page, page main content
+      ;; *box, inline areas
       :else
          {:status 200
           :body
@@ -494,44 +299,73 @@ h1 {
                    [:head
                       [:title "Puumerkki"]
                       [:meta {:charset "UTF-8"}]]
-                      [:script @a-js-code]
-                      [:style  style]
-                   [:body
+                      [:script app-js]
+                      [:style app-css]
+                   [:body {:onload "main()"}
 
-                      [:h1 "Tunnistautuminen"]
+                      [:div {:class "header" :id "header"}
+                         [:b [:a {:onclick "navigateLink(\"etusivu\")" :href "etusivu" :class "tablink"}
+                            "Puumerkki"]]
+                         " "
+                         [:a {:onclick "navigateLink(\"pdf\")" :href "pdf" :class "tablink"}
+                            "PDF"]
+                         " "
+                         [:a {:onclick "navigateLink(\"tyokalut\")" :href "tyokalut" :class "tablink"}
+                            "Työkalut"]
+                         " "
+                         [:div {:class "loginbox" :id "loginbox"}
+                            [:a {:onclick "navigateLink(\"tunnistautuminen\")" :href "tunnistautuminen" :class "tablink"}
+                               "&#x1F464;"]]]
 
-                      [:p "Tunnistautuminen: "
-                         [:button {:onClick "startAuthentication()"}
-                         "tunnistaudu"]]
-                      [:div {:id "authentication" :class "result" :onClick "clearMe(this)"} ""]
+                      [:div {:class "page" :id "page"}
 
-                      [:h1 "PDF Allekirjoitus"]
+                         [:div {:class "etusivu" :id "etusivu"}
+                            [:h1 "Etusivu"]]
 
-                      [:p "Allekirjoita: "
-                         [:button {:onClick "startSigning('signature')"}
-                         "allekirjoita"]]
-                      [:div {:id "signature" :class "result" :onClick "clearMe(this)"} ""]
+                         [:div {:class "tunnistautuminen" :id "tunnistautuminen"}
+                            [:h1 "Tunnistautuminen"]
 
-                      [:h1 "Työkalut"]
+                            [:p "Tunnistautuminen: "
+                               [:button {:onClick "startAuthentication()"}
+                               "tunnistaudu"]]
+                            [:div {:id "authentication" :class "result" :onClick "clearMe(this)"} ""]
 
-                      [:p "Digisign version haku: "
-                         [:button {:onClick "getVersion('mpollux', false)"}
-                         "hae"]]
-                      [:div {:id "mpollux" :class "result" :onClick "clearMe(this)"} ""]
+                            ]
 
-                      [:p "Varmenteet: "
-                         [:button {:onClick "loadCAs()"}
-                         "lataa"]]
-                      [:div {:id "cas" :class "result" :onClick "clearMe(this)"} ""]
+                         [:div {:class "pdf" :id "pdf"}
 
-                      [:p "Revokaatio: "
-                         [:button {:onClick "loadRevocation()"}
-                         "päivitä"]]
-                      [:div {:id "cas" :class "result" :onClick "clearMe(this)"} ""]
+                            [:h1 "PDF Allekirjoitus"]
+
+                            [:p "Allekirjoita: "
+                               [:button {:onClick "startSigning('signature')"}
+                               "allekirjoita"]]
+                            [:div {:id "signature" :class "result" :onClick "clearMe(this)"} ""]]
 
 
+                         [:div {:class "tyokalut" :id "tyokalut"}
+                            [:h1 "Työkalut"]
 
-                      ]])}))
+                            [:p "Digisign version haku: "
+                               [:button {:onClick "getVersion('mpollux', false)"}
+                               "hae"]]
+                            [:div {:id "mpollux" :class "result" :onClick "clearMe(this)"} ""]
+
+                            [:p "Varmenteet: "
+                               [:button {:onClick "loadCAs()"}
+                               "lataa"]]
+                            [:div {:id "cas" :class "result" :onClick "clearMe(this)"} ""]
+
+                            [:p "Revokaatio: "
+                               [:button {:onClick "loadRevocation()"}
+                               "päivitä"]]
+                            [:div {:id "cas" :class "result" :onClick "clearMe(this)"} ""]]]
+
+
+                      ]])})
+   (catch Exception e
+      (log-halko "ERROR: " e)
+      {:status 500
+       :body "fail"})))
 
 (defn wrap-default-content-type [handler]
    (fn [req]
@@ -545,13 +379,25 @@ h1 {
       (let [body-str (ring.util.request/body-string request)]
          (handler (assoc request :body body-str)))))
 
+(defn wrap-error-scrubber [handler]
+   (fn [request]
+      (try (handler request)
+          (catch Exception e
+             (log-halko "Exception: " e)
+             {:status 500
+              :body "An error occurred."}))))
+
+
 (def app
    (->
       router
+      (wrap-user-data)
       (mparams/wrap-multipart-params)
-      (params/wrap-params)
-      (wrap-body-string)
+      (rookies/wrap-cookies)
+      (wrap-body-string) ;; use :params instead
+      ;(params/wrap-params)
       (wrap-default-content-type)
+      (wrap-error-scrubber)
       ))
 
 (def default-opts
@@ -562,20 +408,17 @@ h1 {
     :hmac-secret "randomized"         ;; authentication challenge signing secret
     })
 
-
 (defn start [opts]
    ;; possibly move out of crypt
    (load-trust-roots!
       (get opts :trust-roots))
    (reset! auth-secret
       (get opts :hmac-secret))
-   (reset! a-js-code
-      (make-js-code))
    (log-halko "starting up")
    (if @trust-roots
-      (jetty/run-jetty app
+      (jetty/run-jetty #'app
          (select-keys opts [:port :join? :host]))
-      (println "Cannot start demo app")))
+      (println "Cannot start demo app: no trust roots")))
 
 (defn go []
    (start default-opts))
@@ -606,6 +449,6 @@ h1 {
    (try
       (handle-args default-opts args)
       (catch Exception e
-         (println "ERROR: " e)
+         (log-halko "ERROR: " e)
          1)))
 

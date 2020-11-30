@@ -1,0 +1,85 @@
+
+a {
+   background: none;
+   border: none;
+   color: #006666;
+   text-decoration: none;
+   cursor: pointer; }
+
+a:hover {
+   background: none;
+   border: none;
+   color: #00aaaa;
+   text-decoration: underline;
+   cursor: pointer; }
+
+body {
+   text-size-adjust: none;
+   font-size: 1.2em;
+   background-color: #ffffff;
+   color: #222222 ;
+   line-height: 130%;
+   font-family: 'Open Sans', 'Helvetica', sans serif;
+   margin: 0px;
+   padding: 0px;
+}
+
+.header {
+   background-color: #fafafa;
+   border-bottom: solid #ccc 1px;
+   padding: 10px;
+}
+
+h1 {
+   padding-above: 20px;
+}
+.result {
+   margin-left: 30px;
+   padding: 20px;
+   border: solid black 1px;
+   display: none;
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: solid black 1px;
+  animation-name: spin;
+  animation-duration: 2000ms;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+.tablink {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+div.etusivu {
+   display: none;
+}
+
+div.tunnistautuminen {
+   display: none;
+}
+
+div.pdf {
+   display: none;
+}
+
+div.tyokalut {
+   display: none;
+}
+
+div.page {
+   padding: 20px;
+}
+
+div.loginbox {
+   align: right;
+   display: inline;
+   float: right;
+}
+@keyframes spin {
+  from {transform:rotate(0deg);}
+  to {transform:rotate(360deg);}
+}
