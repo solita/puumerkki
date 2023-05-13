@@ -7,21 +7,22 @@
                  [org.apache.pdfbox/pdfbox "2.0.19"]
                  [org.bouncycastle/bcprov-jdk15on "1.65"]
                  [org.bouncycastle/bcmail-jdk15on "1.65"]
-
-                 ;; for internal test server
-                 [ring/ring "1.7.1"]
-                 [ring/ring-core "1.6.3"]
-                 [ring/ring-defaults "0.3.2"]
-                 [hiccup "1.0.5"]
-                 [clj-http "0.7.7"]
-                 [ring/ring-jetty-adapter "1.6.3"]
-                 [org.clojure/data.json "1.0.0"]]
+                 [commons-io "2.5"]
+                 [commons-codec "1.8"]]
 
   :source-paths ["src/clj" "src/cljc"]
   :test-paths ["test"]
   :resource-paths []
   :aot :all
-
-  :main puumerkki.main
-)
+  :profiles {:dev {:dependencies [;; for internal test server
+                                  [ring/ring "1.7.1"]
+                                  [ring/ring-core "1.6.3"]
+                                  [ring/ring-defaults "0.3.2"]
+                                  [hiccup "1.0.5"]
+                                  [clj-http "0.7.7"]
+                                  [ring/ring-jetty-adapter "1.6.3"]
+                                  [org.clojure/data.json "1.0.0"]]
+                   :source-paths ["dev-src/clj"]
+                   :resource-paths ["res" "pdf"]
+                   :main puumerkki.main}})
 
