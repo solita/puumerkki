@@ -1,0 +1,17 @@
+{
+    "name": "puumerkki",
+    "version": "0.0.1",
+    "private": true,
+    "devDependencies": {
+        "karma": "6.4.3",
+        "karma-chrome-launcher": "3.2.0",
+        "karma-cljs-test": "0.1.0",
+        "shadow-cljs": "2.28.8"
+    },
+    "scripts": {
+        "kondo": "shadow-cljs run clj-kondo.main/main --lint src",
+        "dev": "shadow-cljs node-repl",
+        "test": "shadow-cljs compile test && npx karma start --single-run",
+        "test:watch": "shadow-cljs watch :test & npx karma start --auto-watch"
+    }
+}

@@ -1,0 +1,5 @@
+{:source-paths ["src/cljc" "src/cljs" "test/cljs"]
+ :builds {:test {:target :karma
+                 :output-to "out/test.js"
+                 :ns-regexp "-test$"
+                 :autorun true}}}

@@ -1,8 +1,13 @@
 (ns puumerkki.codec
-  (:refer-clojure :exclude [abs])
-  #?(:cljs (:require [goog.crypt :as crypt])))
+  (:refer-clojure :exclude [abs bigint])
+  (:require [puumerkki.bigint :as bigint :refer [bigint bigint?]]
+            #?(:cljs [goog.crypt :as crypt])))
 
 ;;; misc utils
+
+(def max-safe-integer-bytes
+  #?(:cljs 4
+     :clj 7))
 
 (defn abs [n]
   (if (< n 0) (* n -1) n))
@@ -36,12 +41,21 @@
           (to-7bit-digits
             (bit-shift-right n 7)))))
 
-(defn to-8bit-digits [n]
-  (loop [n n out (list)]
-    (let [this (bit-and n 255) n (bit-shift-right n 8)]
-      (if (= n 0)
-        (cons this out)
-        (recur n (cons this out))))))
+(defn to-8bit-digits [x]
+  (loop [x* x out (list)]
+    (let [res (cons (bit-and x* 255) out)
+          x* (bit-shift-right x* 8)]
+      (if (<= x* 0)
+        res
+        (recur x* res)))))
+
+(defn bigint->8bit-digits [x]
+  (loop [x* (bigint x) out (list)]
+    (let [res (cons (bigint/bit-and x* (bigint 255)) out)
+          x* (bigint/bit-shift-right x* 8)]
+      (if (= x* (bigint 0))
+        (map bigint/->int res)
+        (recur x* res)))))
 
 (defn bignum [in]
   (loop
@@ -111,17 +125,24 @@
 (def integer-identifier
   (identifier class-universal is-primitive tag-integer))
 
+(defn- encode-integer-from-bytes [bytes]
+  (let [bytes (if (= 0x80 (bit-and (first bytes) 0x80))
+                (cons 0 bytes)
+                bytes)]
+    (concat
+     integer-identifier
+     (length-bs (count bytes))
+     bytes)))
+
 (defn encode-integer [int]
   (if (neg? int)
     (fail "Negative integer: " int)
-    (let [bytes (to-8bit-digits int)
-          bytes (if (= 0x80 (bit-and (first bytes) 0x80))
-                  (cons 0 bytes)
-                  bytes)]
-      (concat
-       integer-identifier
-       (length-bs (count bytes))
-       bytes))))
+    (encode-integer-from-bytes (to-8bit-digits int))))
+
+(defn encode-bigint [int]
+  (if (neg? int)
+    (fail "Negative integer: " int)
+    (encode-integer-from-bytes (bigint->8bit-digits int))))
 
 (defn bitstring2bytes [str]
   (loop
@@ -292,6 +313,8 @@
                     (fail ":utctime wants one string element"))
                :else
                   (fail "Unknown ASN.1 operator")))
+      (bigint? node)
+         (encode-bigint node)
       (integer? node)
          (encode-integer node)
       (string? node)
@@ -358,6 +381,14 @@
           (recur (rest bs) (- count 1) (bit-or out (bit-shift-left hd shift)) (+ shift 8))
           (vector false "out of data" bs))))))
 
+(defn read-bytes->bigint [bs count]
+  (loop [[hd & bs-rest :as bs] bs count count out (bigint 0)]
+    (if (= count 0)
+      (vector true out bs)
+      (if hd
+        (recur bs-rest (dec count) (bigint/bit-or (bigint/bit-shift-left out 8) (bigint hd)))
+        (vector false "out of data" bs)))))
+
 (defn parse-length [bs]
   (let [n (first bs)]
     (cond
@@ -373,7 +404,9 @@
   (let
     [[ok nb bs] (parse-length bs)]
     (if ok
-      (read-bytes bs nb)
+      (if (> nb max-safe-integer-bytes)
+        (read-bytes->bigint bs nb)
+        (read-bytes bs nb))
       (vector false (str "failed to get integer size: " nb) bs))))
 
 (defn grab [lst n]
