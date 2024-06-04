@@ -3,25 +3,25 @@
 
 (ns puumerkki.codec-test
   (:require [clojure.test :refer :all]
-            [codec.core :refer :all]))
+            [puumerkki.codec :refer :all]))
 
 (deftest asn1-known
   (testing "Known ASN.1 encodings"
-    (is (= (to-8bit-digits 111111111111111) 
+    (is (= (to-8bit-digits 111111111111111)
               [101 14 18 78 241 199]))
-    (is (= (bignum 127) 
+    (is (= (bignum 127)
               [127]))
-    (is (= (bignum 1111111111111111111) 
+    (is (= (bignum 1111111111111111111)
               [143 181 221 181 178 222 145 227 71]))
-    (is (= (encode-object-identifier (list 1 2 3 4)) 
+    (is (= (encode-object-identifier (list 1 2 3 4))
               [6 3 42 3 4]))
-    (is (= (encode-object-identifier (list 1 2 840 113549 1 1 1)) 
+    (is (= (encode-object-identifier (list 1 2 840 113549 1 1 1))
               [6 9 42 134 72 134 247 13 1 1 1]))
-    (is (= (bitstring2bytes "1111111100000000111100000000111100000001") 
+    (is (= (bitstring2bytes "1111111100000000111100000000111100000001")
               [255 0 240 15 1]))
-    (is (= (encode-bitstring "1010111111111000000001111000010101") 
+    (is (= (encode-bitstring "1010111111111000000001111000010101")
               [3 6 6 175 248 7 133 64]))
-    (is (= (encode-ia5string "Hello, world!") 
+    (is (= (encode-ia5string "Hello, world!")
               [22 13 72 101 108 108 111 44 32 119 111 114 108 100 33]))
     (is (= (encode-octet-string (list 0 1 2 127 128 255))
               [4 6 0 1 2 127 128 255]))
@@ -118,7 +118,7 @@
 
 ;;; ASN.1 pattern matching
 
-(deftest asn-pat 
+(deftest asn-pat
   (testing "ASN.1 AST node pattern matching and utilities"
     (is (= true  (asn1-match? [:foo "foo"] :foo)))
     (is (= false (asn1-match? [:foo "foo"] :bar)))
@@ -128,10 +128,10 @@
     (is (= true (asn1-match? [:foo 31337 () 42 [:bar] true false] [:foo :? () 42 :bar true false])))
 
     (is (= true (asn1-match? [:set 1 2 3] [:set 3 1 2])))
-    
+
     (is (= true (asn1-match? [:set 1 1] [:set 1 1])))
 
-    (is (= true (asn1-match? [:set [:set 1 2] [:set 1 2 3] [:set 1 2 4]] 
+    (is (= true (asn1-match? [:set [:set 1 2] [:set 1 2 3] [:set 1 2 4]]
                              [:set [:set :? 1 2] :? [:set 3 2 1]]))) ;; first has 2 options, middle 3, last one
 ))
 
@@ -140,9 +140,9 @@
 
 (deftest b64
   (testing "Base64 known decoding"
-    (is (= (base64-decode "") 
+    (is (= (base64-decode "")
       ""))
-    (is (= (base64-decode "YQ==") 
+    (is (= (base64-decode "YQ==")
       "a"))
     (is (= (base64-decode "YWI=")
            "ab"))
@@ -183,4 +183,3 @@
       (is (base64-rencode (apply list (range 0 256))))
       (is (base64-rencode (apply list (concat (range 0 256) (range 0 256) (remove even? (range 0 200)) (remove odd? (range 1 150)) (range 255 0)))))
 ))
-
