@@ -10,9 +10,13 @@
 (deftest asn1-known
   (testing "Known ASN.1 encodings"
     (is (= [101 14 18 78 241 199]
-           (codec/bigint->8bit-digits (bigint/bigint "111111111111111"))))
+           (codec/bigint->8bit-digits #?(:cljs (bigint/bigint "111111111111111")
+                                         :clj 111111111111111))))
     (is (= [127]
            (codec/bignum 127)))
+    #?(:clj
+       (is (= (codec/bignum 1111111111111111111)
+              [143 181 221 181 178 222 145 227 71])))
     (is (= [6 3 42 3 4]
            (codec/encode-object-identifier (list 1 2 3 4))))
     (is (= [6 9 42 134 72 134 247 13 1 1 1]
@@ -53,7 +57,8 @@
     (is (= [4 10 4 8 2 6 10 27 1 212 177 199]
           (codec/asn1-encode
             [:encapsulated-octet-string
-             [:encapsulated-octet-string (bigint/bigint "11111111111111")]])))
+             [:encapsulated-octet-string #?(:cljs (bigint/bigint "11111111111111")
+                                            :clj 11111111111111)]])))
     (is (= [3 7 0 2 4 66 58 53 199]
           (codec/asn1-encode
               [:encapsulated-bitstring 1111111111])))))
@@ -69,10 +74,19 @@
     (is (codec/asn1-rencode 256))
     (is (codec/asn1-rencode 65535))
     (is (codec/asn1-rencode 65536))
-    (is (codec/asn1-rencode (dec (js/Math.pow 2 (dec (* 8 4))))))
-    (is (codec/asn1-rencode (bigint/bigint (js/Math.pow 2 (dec (* 8 4))))))
-    (is (codec/asn1-rencode (bigint/bigint 11111111111111)))
+    (is (codec/asn1-rencode 0x7fffffff))
+    (is (codec/asn1-rencode #?(:cljs (bigint/bigint 0x80000000)
+                               :clj 0x80000000)))
+    (is (codec/asn1-rencode #?(:cljs (bigint/bigint 11111111111111)
+                               :clj 11111111111111)))
+    (is (codec/asn1-rencode #?(:cljs (bigint/bigint "0x3fffffffffffffff")
+                               :clj 0x3fffffffffffffff)))
+    (is (codec/asn1-rencode #?(:cljs (bigint/bigint "0x7fffffffffffffff")
+                               :clj 0x7fffffffffffffff)))
+    (is (codec/asn1-rencode #?(:cljs (bigint/bigint "0x8000000000000000")
+                               :clj (bigint/bigint 0x8000000000000000))))
     (is (codec/asn1-rencode (bigint/bigint "1111111111111111111111111111")))
+    (is (codec/asn1-rencode (bigint/bigint "46116860184273879044611686018427387904")))
 
     (is (codec/asn1-rencode [:octet-string (list)]))
     (is (codec/asn1-rencode [:octet-string (list 1)]))
@@ -115,7 +129,38 @@
 
     (is (codec/asn1-rencode [:sequence true false]))
 
-    (is (codec/asn1-rencode [:explicit 0 [:sequence [:set [:explicit 0 [:explicit 0 [:sequence [:explicit 0 [:sequence [:explicit 0 [:sequence [:explicit 0 [:sequence [:explicit 0 [:sequence [:set [:set [:set [:set [:set [:sequence [:set 1 2 3 4 1 3 4]]]]]]]]]]] [:explicit 0 [:explicit 0 [:sequence [:explicit 0 [:sequence [:explicit 0 [:sequence [:explicit 0 [:sequence [:explicit 0 [:sequence [:set [:set [:set 1 4 4 (bigint/bigint "1111111111111111111") 1 1 1 11 (bigint/bigint 11111111111111) [:printable-string "fooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"]]]]]]]]]]]]]]]]]]]]]]]]]))))
+    (is (codec/asn1-rencode
+         [:explicit 0
+          [:sequence
+           [:set
+            [:explicit 0
+             [:explicit 0
+              [:sequence
+               [:explicit 0
+                [:sequence
+                 [:explicit 0
+                  [:sequence
+                   [:explicit 0
+                    [:sequence
+                     [:explicit 0
+                      [:sequence [:set [:set [:set [:set [:set [:sequence [:set 1 2 3 4 1 3 4]]]]]]]]]]]
+                   [:explicit 0
+                    [:explicit 0
+                     [:sequence
+                      [:explicit 0
+                       [:sequence
+                        [:explicit 0
+                         [:sequence
+                          [:explicit 0
+                           [:sequence
+                            [:explicit 0
+                             [:sequence
+                              [:set [:set [:set
+                                           1 4 4 #?(:cljs (bigint/bigint "1111111111111111111")
+                                                    :clj 1111111111111111111)
+                                           1 1 1 11 #?(:cljs (bigint/bigint 11111111111111)
+                                                       :clj 11111111111111)
+                                           [:printable-string "fooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"]]]]]]]]]]]]]]]]]]]]]]]]]))))
 
 
 ;;; ASN.1 pattern matching
