@@ -40,7 +40,45 @@
     (is (= [23 13 50 48 48 54 51 48 48 57 51 56 51 57 90]
            (codec/encode-utc-time "200630093839Z")))
     (is (= [19 8 67 108 111 106 117 116 114 101]
-           (codec/encode-printable-string "Clojutre")))))
+           (codec/encode-printable-string "Clojutre")))
+    (is (= [2 9 0 234 142 39 244 170 129N 87 99]
+           (codec/asn1-encode (bigint/bigint "16901490383354156899"))))
+    (is (= [2 15 1 121 163 99 143 118 44 160 56 251 15 223 102 168 157]
+           (codec/asn1-encode (bigint/bigint "7659413423516931801881188845922461")))))
+
+  (testing "Known ASN.1 decodins"
+    (is (= (bigint/bigint "16901490383354156899")
+           (codec/asn1-decode [2 9 0 234 142 39 244 170 129N 87 99])))
+    (is (= (bigint/bigint "7659413423516931801881188845922461")
+           (codec/asn1-decode [2 15 1 121 163 99 143 118 44 160 56 251 15 223 102 168 157])))))
+
+(deftest read-bytes
+  (testing "Known byte sequences"
+    (is (= [true 0 []]
+           (codec/read-bytes [0] 1)))
+
+    (is (= [true 25231108 []]
+           (codec/read-bytes [1 128 255 4] 4)))
+
+    (is (= [true (bigint/bigint "16901490383354156899") nil]
+           (codec/read-bytes->bigint [0 234 142 39 244 170 129N 87 99] 9)))
+
+    (is (= [true (bigint/bigint "7659413423516931801881188845922461") nil]
+           (codec/read-bytes->bigint [1 121 163 99 143 118 44 160 56 251 15 223 102 168 157] 15))))
+
+  (testing "Remaining sequence is returned"
+    (is (= [true 25231108 [2 4 1 2 3 4]]
+           (codec/read-bytes [1 128 255 4 2 4 1 2 3 4] 4)))
+
+    (is (= [true (bigint/bigint "16901490383354156899") [2 1 4]]
+           (codec/read-bytes->bigint [0 234 142 39 244 170 129N 87 99 2 1 4] 9))))
+
+  (testing "Fails when count argument is larger than the sequence length"
+    (is (= [false "out of data" []]
+           (codec/read-bytes [1 128 255] 4)))
+
+    (is (= [false "out of data" nil]
+           (codec/read-bytes->bigint [1 121 163 99 143 118 44 160 56 251 15 223 102 168 157] 16)))))
 
 (deftest asn1-dsl
   (testing "AST -> known ASN.1 (DER)"
@@ -85,8 +123,11 @@
                                :clj 0x7fffffffffffffff)))
     (is (codec/asn1-rencode #?(:cljs (bigint/bigint "0x8000000000000000")
                                :clj (bigint/bigint 0x8000000000000000))))
+
     (is (codec/asn1-rencode (bigint/bigint "1111111111111111111111111111")))
     (is (codec/asn1-rencode (bigint/bigint "46116860184273879044611686018427387904")))
+    (is (codec/asn1-rencode (bigint/bigint "16901490383354156899")))
+    (is (codec/asn1-rencode (bigint/bigint "7659413423516931801881188845922461")))
 
     (is (codec/asn1-rencode [:octet-string (list)]))
     (is (codec/asn1-rencode [:octet-string (list 1)]))
@@ -161,7 +202,6 @@
                                            1 1 1 11 #?(:cljs (bigint/bigint 11111111111111)
                                                        :clj 11111111111111)
                                            [:printable-string "fooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"]]]]]]]]]]]]]]]]]]]]]]]]]))))
-
 
 ;;; ASN.1 pattern matching
 
