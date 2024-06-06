@@ -4,3 +4,10 @@
 pdf/test-allekirjoitettu.pdf
 pdf/testi.pdf-signable
 target
+pom.xml
+public
+out
+node_modules
+.clj-kondo
+.lsp
+.shadow-cljs

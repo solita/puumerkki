@@ -1,27 +1,13 @@
 (ns puumerkki.codec
-  #?(:cljs (:require [goog.crypt :as crypt])))
+  (:refer-clojure :exclude [abs bigint])
+  (:require [puumerkki.bigint :as bigint :refer [bigint bigint?]]
+            #?(:cljs [goog.crypt :as crypt])))
 
 ;;; misc utils
 
-(defn fold [op st lst]
-  (if (empty? lst)
-    st
-    (recur op (op st (first lst)) (rest lst))))
-
-;; pred lst → bool
-(defn all [op lst]
-  (cond
-    (empty? lst) true
-    (op (first lst))
-    (recur op (rest lst))
-    :true false))
-
-(defn zip [op la lb]
-  (loop [la la lb lb out ()]
-    (if (or (empty? la) (empty? lb))
-      (reverse out)
-      (recur (rest la) (rest lb)
-             (cons (op (first la) (first lb)) out)))))
+(def max-safe-integer-bytes
+  #?(:cljs 4
+     :clj 7))
 
 (defn abs [n]
   (if (< n 0) (* n -1) n))
@@ -32,12 +18,7 @@
     (empty? b) false
     (< (first a) (first b)) true
     (= (first a) (first b)) (recur (rest a) (rest b))
-    :true false))
-
-(defn lex-sorted? [lst]
-  (if (empty? lst)
-    true
-    (fold (fn [last next] (if (and last (lex< last next)) next false)) (first lst) (rest lst))))
+    :else false))
 
 (defn fail [& whys]
   #?(:clj (throw (Exception. (apply str whys))), :cljs (throw (js/Error. whys))))
@@ -60,12 +41,21 @@
           (to-7bit-digits
             (bit-shift-right n 7)))))
 
-(defn to-8bit-digits [n]
-  (loop [n n out (list)]
-    (let [this (bit-and n 255) n (bit-shift-right n 8)]
-      (if (= n 0)
-        (cons this out)
-        (recur n (cons this out))))))
+(defn to-8bit-digits [x]
+  (loop [x* x out (list)]
+    (let [res (cons (bit-and x* 255) out)
+          x* (bit-shift-right x* 8)]
+      (if (<= x* 0)
+        res
+        (recur x* res)))))
+
+(defn bigint->8bit-digits [x]
+  (loop [x* (bigint x) out (list)]
+    (let [res (cons (bigint/bit-and x* (bigint 255)) out)
+          x* (bigint/bit-shift-right x* 8)]
+      (if (= x* (bigint 0))
+        (map bigint/->int res)
+        (recur x* res)))))
 
 (defn bignum [in]
   (loop
@@ -97,7 +87,7 @@
 
 (defn bytes2bitstring [bs]
   (reverse
-    (fold byte2bits () bs)))
+    (reduce byte2bits () bs)))
 
 (defn identifier [class consp tagnum]
   (if (> tagnum 30)
@@ -135,22 +125,24 @@
 (def integer-identifier
   (identifier class-universal is-primitive tag-integer))
 
+(defn- encode-integer-from-bytes [bytes]
+  (let [bytes (if (= 0x80 (bit-and (first bytes) 0x80))
+                (cons 0 bytes)
+                bytes)]
+    (concat
+     integer-identifier
+     (length-bs (count bytes))
+     bytes)))
+
 (defn encode-integer [int]
-  (concat integer-identifier
-          (cond
-            (= int 0)
-            (list 1 0)
-            (< int 0)
-            (fail "negative integer")
-            :true
-            (let
-              [bytes (to-8bit-digits int)
-               bytes (if (= 0x80 (bit-and (first bytes) 0x80))
-                       (cons 0 bytes)
-                       bytes)]
-              (concat
-                (length-bs (count bytes))
-                bytes)))))
+  (if (neg? int)
+    (fail "Negative integer: " int)
+    (encode-integer-from-bytes (to-8bit-digits int))))
+
+(defn encode-bigint [int]
+  (if (neg? int)
+    (fail "Negative integer: " int)
+    (encode-integer-from-bytes (bigint->8bit-digits int))))
 
 (defn bitstring2bytes [str]
   (loop
@@ -321,6 +313,8 @@
                     (fail ":utctime wants one string element"))
                :else
                   (fail "Unknown ASN.1 operator")))
+      (bigint? node)
+         (encode-bigint node)
       (integer? node)
          (encode-integer node)
       (string? node)
@@ -353,7 +347,7 @@
       (recur
         (bit-or (bit-shift-left out 7) (bit-and this 127))
         (first lst) (rest lst))
-      :true
+      :else
       (vector true (bit-or (bit-shift-left out 7) this) lst))))
 
 ;; parsers are lst → ok/bool value/reason rest-of-input
@@ -387,6 +381,14 @@
           (recur (rest bs) (- count 1) (bit-or out (bit-shift-left hd shift)) (+ shift 8))
           (vector false "out of data" bs))))))
 
+(defn read-bytes->bigint [bs count]
+  (loop [[hd & bs-rest :as bs] bs count count out (bigint 0)]
+    (if (= count 0)
+      (vector true out bs)
+      (if hd
+        (recur bs-rest (dec count) (bigint/bit-or (bigint/bit-shift-left out 8) (bigint hd)))
+        (vector false "out of data" bs)))))
+
 (defn parse-length [bs]
   (let [n (first bs)]
     (cond
@@ -394,7 +396,7 @@
       (vector false "out of data" bs)
       (< n 128)
       (vector true n (rest bs))
-      :true
+      :else
       (let [count (- n 128)]
         (read-bytes (rest bs) count)))))
 
@@ -402,7 +404,9 @@
   (let
     [[ok nb bs] (parse-length bs)]
     (if ok
-      (read-bytes bs nb)
+      (if (> nb max-safe-integer-bytes)
+        (read-bytes->bigint bs nb)
+        (read-bytes bs nb))
       (vector false (str "failed to get integer size: " nb) bs))))
 
 (defn grab [lst n]
@@ -412,7 +416,7 @@
       (vector (reverse out) lst)
       (empty? lst)
       (vector false lst)
-      :true
+      :else
       (recur (rest lst) (- n 1) (cons (first lst) out)))))
 
 (defn parse-printable-string [bs]
@@ -494,7 +498,7 @@
           (vector false "failed to read bitstring bytes" bs)
           (> pads 7)
           (vector false (str "invalid number of pad bits in bit string: " pads) bs)
-          :true
+          :else
           (vector ok (octets2bitstring octets pads) bs)))
       (vector false "invalid bitstring length" bs))))
 
@@ -536,7 +540,7 @@
                         ok (recur seqbsp (cons val out))
                         (empty? seqbs)
                         (vector true (into [] (cons :set (reverse out))) bs)
-                        :true
+                        :else
                         (vector false
                                 (str "error reading a set at position " (count out)
                                      (if (empty? out) "" (str " after " (first out)))
@@ -554,7 +558,7 @@
                           ok (recur seqbsp (cons val out))
                           (empty? seqbs)
                           (vector true (into [] (cons :sequence (reverse out))) bs)
-                          :true
+                          :else
                           (vector false
                                   (str "error reading a sequence at position " (count out)
                                        (if (empty? out) "" (str " after " (first out)))
@@ -578,7 +582,7 @@
                 (vector true false bs)
                 (= val 255)
                 (vector true true bs)
-                :true
+                :else
                 (vector false (str "wrong shade of gray for boolean truth: " val) bs)))
             (and (= class class-universal) (= tag tag-object-identifier))
             (parse-object-identifier bs)
@@ -590,7 +594,7 @@
                     (vector true (vector :explicit tagnum val) bs)
                     (vector false (str "failed to read explicit content: " val) bs)))
                 (vector false (str "failed to read explicit: " len) bs)))
-            :true
+            :else
             (vector false (str "Unknown identifier tag: " tagnum ", constructed " consp ", class " class) bs))
           (vector false (str "Failed to read identifier: " class) bs)))
       (vector false "no input" bs))))
@@ -681,8 +685,8 @@
             (= (count asn) (count pat))
             (if (= (first pat) :set)
               (match-set (rest asn) (rest pat) asn1-match?)
-              (all (partial apply asn1-match?)
-                   (rest (zip vector asn pat)))))
+              (every? (partial apply asn1-match?)
+                      (rest (map vector asn pat)))))
     (number? pat)
        (= pat asn)
     (or (= pat true) (= pat false))
@@ -870,7 +874,7 @@
         (< b 62) (- b 4)
         (= b 62) 43
         :else 47))
-    :true
+    :else
     (do
       (println "Bad base64 digit: " b)
       false)))
@@ -893,7 +897,7 @@
                         (bit-and 63 (bit-or (bit-shift-left a 4) (bit-shift-right b 4))) ;; low 2 + top 4
                         (bit-shift-right a 2))              ;; top 6 bits
                   out))
-        :true
+        :else
         (recur l
                (cons (bit-and c 63)
                      (cons (bit-and 63 (bit-or (bit-shift-left b 2) (bit-shift-right c 6)))
@@ -909,7 +913,7 @@
     (apply str (map base64-digit (base64-encode-bytes input)))
     (vector? input)
     (apply str (base64-encode-bytes input))
-    :true
+    :else
     (fail "How should I base64-encode " input " of type " (type input) "?")))
 
 (defn base64-rencode [in]
@@ -937,7 +941,7 @@
          bits (reduce (fn [out x] (assoc out x (- (+ x 10) 97))) bits (range 97 103))
          bits (reduce (fn [out x] (assoc out x (- (+ x 10) 65))) bits (range 65 71))]
       bits))
-      
+
 (defn hex-encode [bs]
    (loop [bs bs out ()]
       (if (empty? bs)
@@ -954,7 +958,7 @@
             (map (fn [[a b]] (+ (* a 16) b)) (partition 2 bits))
             nil))
       nil))
-         
-                   
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;,
