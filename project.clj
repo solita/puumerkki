@@ -1,4 +1,4 @@
-(defproject puumerkki "0.9.2"
+(defproject puumerkki "0.9.3-SNAPSHOT"
   :description "Puumerkki allekirjoituskirjasto ja esimerkkipalvelin"
   :min-lein-version "2.9.1"
   :dependencies [[org.clojure/clojure "1.11.3"]
