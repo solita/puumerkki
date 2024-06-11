@@ -16,5 +16,5 @@ lein test
 
 JS-tests are run with Shadow-cljs. Install npm, run `npm install` and execute tests:
 ```
-npm run test
+npm test
 ```

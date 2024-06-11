@@ -7,7 +7,18 @@ on:
       - master
 
 jobs:
-  build:
+  build-node:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm test
+
+  build-jvm:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,5 +31,7 @@ jobs:
         uses: DeLaGuardo/setup-clojure@12.5
         with:
           lein: 2.9.1
+      - name: Run tests
+        run: lein test
       - name: Build
         run: lein jar
