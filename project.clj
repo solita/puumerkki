@@ -22,7 +22,7 @@
                                   [hiccup "1.0.5"]
                                   [clj-http "0.7.7"]
                                   [ring/ring-jetty-adapter "1.6.3"]
-                                  [org.clojure/data.json "1.0.0"]]
+                                  [org.clojure/data.json "1.1.0"]]
                    :source-paths ["dev-src/clj"]
                    :resource-paths ["res" "pdf"]
                    :main puumerkki.main}})
