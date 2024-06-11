@@ -8,7 +8,7 @@
                  [org.bouncycastle/bcprov-jdk18on "1.78.1"]
                  [org.bouncycastle/bcmail-jdk18on "1.78.1"]
                  [commons-io "2.16.1"]
-                 [commons-codec "1.8"]]
+                 [commons-codec "1.17.0"]]
 
   :source-paths ["src/clj" "src/cljc"]
   :test-paths ["test/clj" "test/cljc"]
