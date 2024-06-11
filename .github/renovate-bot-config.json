@@ -1,0 +1,11 @@
+{
+  "branchPrefix": "renovate-fix/",
+  "gitAuthor": "Renovate Bot <bot@renovateapp.com>",
+  "platform": "github",
+  "repositories": [
+    "solita/puumerkki"
+  ],
+  "extends": ["config:recommended"],
+  "dependencyDashboard": true,
+  "labels": ["dependencies"]
+}
