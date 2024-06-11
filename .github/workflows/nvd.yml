@@ -1,0 +1,51 @@
+name: nvd-clojure
+
+on:
+  # Run every Monday at 2:00.
+  # The repository might not have much activity for long periods of time, so good to run the nvd on schedule as well
+  # Run on pull requests and on master as well to encourage fixing vulnerabilities before merging
+  schedule:
+    - cron: '0 2 * * 1'
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  nvd:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Install clojure tools
+        uses: DeLaGuardo/setup-clojure@12.5
+        with:
+          lein: 2.9.1
+      - name: Restore Maven cache # Caching NVD database can speed up the build a lot
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/project.clj') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Run nvd
+        working-directory: nvd
+        env:
+          NVD_API_TOKEN: ${{ secrets.NVD_API_TOKEN }}
+        run: lein with-profile -user run -m nvd.task.check "nvd-clojure.edn" "$(cd .. && lein with-profile -user,-dev classpath)"
+      - name: Save Maven cache # cache@v4 has save-always, but it's broken. Save manually until it's fixed
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/project.clj') }}
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: success() || failure()
+        with:
+          report_paths: 'nvd/target/nvd/dependency-check-junit.xml'
+          check_name: 'Vulnerability report'

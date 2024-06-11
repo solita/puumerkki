@@ -11,3 +11,5 @@ node_modules
 .clj-kondo
 .lsp
 .shadow-cljs
+.idea
+puumerkki.iml

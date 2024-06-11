@@ -4,10 +4,10 @@
   :dependencies [[org.clojure/clojure "1.11.3"]
                  [pandect "0.6.1"] ;; SHA
                  ;[org.apache.pdfbox/pdfbox "1.8.16"] ;; no longer supported due to api changes required for 2.x
-                 [org.apache.pdfbox/pdfbox "2.0.19"]
-                 [org.bouncycastle/bcprov-jdk15on "1.65"]
-                 [org.bouncycastle/bcmail-jdk15on "1.65"]
-                 [commons-io "2.5"]
+                 [org.apache.pdfbox/pdfbox "2.0.31"]
+                 [org.bouncycastle/bcprov-jdk18on "1.78.1"]
+                 [org.bouncycastle/bcmail-jdk18on "1.78.1"]
+                 [commons-io "2.16.1"]
                  [commons-codec "1.8"]]
 
   :source-paths ["src/clj" "src/cljc"]

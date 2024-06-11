@@ -1,4 +1,5 @@
 # Puumerkki
+![NVD status](https://github.com/solita/puumerkki/actions/workflows/nvd.yml/badge.svg)
 
 A library for communicating with DVV certificate card reader software
 
