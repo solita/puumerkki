@@ -30,7 +30,7 @@
                                   [ring/ring-defaults "0.3.2"]
                                   [hiccup "1.0.5"]
                                   [clj-http "3.13.0"]
-                                  [ring/ring-jetty-adapter "1.6.3"]
+                                  [ring/ring-jetty-adapter "1.12.1"]
                                   [org.clojure/data.json "2.5.0"]]
                    :source-paths ["dev-src/clj"]
                    :resource-paths ["res" "pdf"]
