@@ -1,8 +1,11 @@
-(defproject puumerkki "0.9.3-SNAPSHOT"
+(defproject io.github.solita-antti-mottonen/puumerkki "0.9.3-SNAPSHOT"
+  :license {:name "Eclipse Public License"
+            :url "http://www.eclipse.org/legal/epl-v10.html"}
+  :url "https://github.com/solita/puumerkki"
   :description "Puumerkki allekirjoituskirjasto ja esimerkkipalvelin"
   :min-lein-version "2.9.1"
   :dependencies [[org.clojure/clojure "1.11.3"]
-                 [pandect "0.6.1"] ;; SHA
+                 [pandect "0.6.1"]                          ;; SHA
                  ;[org.apache.pdfbox/pdfbox "1.8.17"] ;; no longer supported due to api changes required for 2.x
                  [org.apache.pdfbox/pdfbox "2.0.31"]
                  [org.bouncycastle/bcprov-jdk18on "1.78.1"]
@@ -14,6 +17,12 @@
   :test-paths ["test/clj" "test/cljc"]
   :resource-paths []
   :aot :all
+  :deploy-repositories [["releases" {:url      "https://clojars.org/repo"
+                                     :username :env/clojars_username
+                                     :password :env/clojars_token}]
+                        ["snapshots" {:url      "https://clojars.org/repo"
+                                      :username :env/clojars_username
+                                      :password :env/clojars_token}]]
   :profiles {:dev {:dependencies [;; for internal test server
                                   [clj-kondo/clj-kondo "RELEASE"]
                                   [ring/ring "1.7.1"]
@@ -25,4 +34,4 @@
                                   [org.clojure/data.json "2.5.0"]]
                    :source-paths ["dev-src/clj"]
                    :resource-paths ["res" "pdf"]
-                   :main puumerkki.main}})
+                   :main           puumerkki.main}})

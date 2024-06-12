@@ -35,3 +35,22 @@ jobs:
         run: lein test
       - name: Build
         run: lein jar
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Install clojure tools
+        uses: DeLaGuardo/setup-clojure@12.5
+        with:
+          lein: 2.9.1
+      - run: lein deploy
+        env:
+          CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+          CLOJARS_TOKEN: ${{ secrets.CLOJARS_TOKEN }}
