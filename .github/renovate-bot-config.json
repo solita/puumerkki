@@ -10,7 +10,7 @@
   "labels": ["dependencies"],
   "packageRules": [
     {
-      "matchPackagePatterns": ["ring-clojure/ring"],
+      "matchPackagePatterns": ["ring/ring"],
       "groupName": "Ring dependencies"
     }
   ]
