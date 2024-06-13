@@ -44,7 +44,7 @@
   :profiles {:dev {:dependencies   [;; for internal test server
                                     [clj-kondo/clj-kondo "RELEASE"]
                                     [ring/ring "1.7.1"]
-                                    [ring/ring-core "1.6.3"]
+                                    [ring/ring-core "1.12.1"]
                                     [ring/ring-defaults "0.3.2"]
                                     [hiccup "1.0.5"]
                                     [clj-http "3.13.0"]
