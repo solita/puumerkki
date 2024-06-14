@@ -72,7 +72,7 @@
         (if (= pos len)
           target
           (do
-            (aset-byte target pos (aget arr (+ start pos)))
+            (aset-byte target pos (aget ^bytes arr (+ start pos)))
             (recur (+ pos 1))))))))
 
 (defn copy-bytes! [array content offset]
@@ -80,7 +80,7 @@
     (loop [pos (- (count content) 1)]
       (if (> pos -1)
         (do
-          (aset-byte array (+ offset pos) (aget content pos))
+          (aset-byte array (+ offset pos) (aget ^bytes content pos))
           (recur (- pos 1)))
         array))
     nil))
@@ -216,7 +216,7 @@
 ;; count number of ascii zeroes at position (which are used for signature area filling)
 (defn zeroes-at [data pos]
   (loop [pos pos n 0]
-    (let [val (aget data pos)]
+    (let [val (aget ^bytes data pos)]
       (if (= val 48)
         (recur (+ pos 1) (+ n 1))
         n))))
@@ -226,7 +226,7 @@
     (cond
       (not (aget data pos))
       false                                                 ;; out of data
-      (and (= (aget data pos) 60) (> (zeroes-at data (+ pos 1)) 512))
+      (and (= (aget ^bytes data pos) 60) (> (zeroes-at data (+ pos 1)) 512))
       (+ pos 1)
       :else
       (recur (+ pos 1)))))
