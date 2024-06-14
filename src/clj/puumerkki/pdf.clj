@@ -36,7 +36,7 @@
     (io/copy (io/input-stream path) out)
     (.toByteArray out)))
 
-(defn read-pdf [path]
+(defn read-pdf ^PDDocument [path]
   (PDDocument/load (io/file path)))
 
 (defn write-file! [path data]
@@ -297,7 +297,7 @@
   (let [pdf (read-pdf pdf-path)
         sig-designer
         (PDVisibleSignDesigner.
-          ^PDDocument pdf
+          pdf
           (io/input-stream image-path)
           1)
         sig-props (PDVisibleSigProperties.)
@@ -380,10 +380,10 @@
       (reduce
         (fn [st sig]
           (and st
-               (let [signature-content (.getContents sig (io/input-stream pdf-path))
+               (let [^bytes signature-content (.getContents sig (io/input-stream pdf-path))
                      signed-content (.getSignedContent sig (io/input-stream pdf-path))
                      cmsProcessableInputStream (CMSProcessableByteArray. signed-content)
-                     cmsSignedData (CMSSignedData. cmsProcessableInputStream ^bytes signature-content)
+                     cmsSignedData (CMSSignedData. cmsProcessableInputStream signature-content)
                      signerInformationStore (.getSignerInfos cmsSignedData)
                      signers (.getSigners signerInformationStore)
                      certs (.getCertificates cmsSignedData)]
