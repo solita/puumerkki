@@ -37,7 +37,10 @@ The server can be used to sign certificates together with the card reader softwa
 1. Start the server:\
 `lein with-profile dev run -t citizen-certificate-roots.pem`
 1. Start a reverse proxy to serve the content over https:\
-`docker run -p 443:443 caddy caddy reverse-proxy --from localhost:443 --to http://host.docker.internal:3000`
+On macOS:\
+`docker run -p 443:443 caddy caddy reverse-proxy --from localhost:443 --to http://host.docker.internal:3000`\
+On Linux:\
+`docker run -p 443:443 caddy caddy reverse-proxy --from localhost:443 --to http://localhost:3000`
 1. Access the server at [https://localhost](). Accept the self-signed certificate.
 
 ## Publishing
