@@ -64,7 +64,7 @@
   (seq->byte-array
     (map unsigned->signed-byte seq)))
 
-(defn subarray [arr start len]
+(defn subarray [^bytes arr start len]
   (if (or (< len 0) (< start 0) (> (+ start len) (count arr)))
     nil
     (let [target (byte-array len)]
@@ -75,7 +75,7 @@
             (aset-byte target pos (aget arr (+ start pos)))
             (recur (+ pos 1))))))))
 
-(defn copy-bytes! [array content offset]
+(defn copy-bytes! [array ^bytes content offset]
   (if (>= (count array) (+ offset (count content)))
     (loop [pos (- (count content) 1)]
       (if (> pos -1)
@@ -214,14 +214,14 @@
       nil)))
 
 ;; count number of ascii zeroes at position (which are used for signature area filling)
-(defn zeroes-at [data pos]
+(defn zeroes-at [^bytes data pos]
   (loop [pos pos n 0]
     (let [val (aget data pos)]
       (if (= val 48)
         (recur (+ pos 1) (+ n 1))
         n))))
 
-(defn find-signature-space [data]
+(defn find-signature-space [^bytes data]
   (loop [pos 0]
     (cond
       (not (aget data pos))
