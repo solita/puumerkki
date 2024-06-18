@@ -1,28 +1,14 @@
 (ns puumerkki.main
    (:require
-      [puumerkki.codec :as codec]
-      [puumerkki.pdf :as pdf]
-      [puumerkki.crypt :as crypt]
-      [pandect.algo.sha256 :refer :all]
-      [ring.adapter.jetty :as jetty]
-      [ring.middleware.params :as params]            ;; query string & body params
-      [ring.middleware.multipart-params :as mparams] ;; post body
-      [ring.middleware.cookies :as rookies]
+      [clojure.data.json :as json]
       [hiccup.core :refer [html]]
-      [clj-http.client :as http]
-      [clojure.data.json :as json])
-
-   (:import
-      [org.apache.pdfbox.pdmodel.interactive.digitalsignature PDSignature SignatureInterface]
-      [org.apache.pdfbox.pdmodel PDDocument]
-      ;[org.apache.pdfbox.pdmodel.graphics.xobject PDPixelMap PDXObject PDJpeg]
-      [org.apache.pdfbox.io RandomAccessFile]
-      [org.apache.commons.io IOUtils]
-      (org.apache.pdfbox.cos COSName)
-      (java.security MessageDigest)
-      [java.util Calendar]
-      [java.io File FileInputStream FileOutputStream ByteArrayOutputStream]
-      (org.apache.commons.codec.digest DigestUtils))
+      [pandect.algo.sha256 :refer :all]
+      [puumerkki.codec :as codec]
+      [puumerkki.crypt :as crypt]
+      [puumerkki.pdf :as pdf]        ;; post body
+      [ring.adapter.jetty :as jetty]
+      [ring.middleware.cookies :as rookies]
+      [ring.middleware.multipart-params :as mparams])
 
    (:gen-class))
 
@@ -35,9 +21,16 @@
 
 (defonce trust-roots (atom nil))
 
+(defn log-halko [& what]
+   (future
+      (println "Log: " what)
+      ;(http/post "http://localhost:3001/log"
+      ;   {:form-params {:service "puumerkki" :msg (apply str what)}})
+      ))
+
 (defn load-trust-roots! [pem-path]
    (reset! trust-roots
-      (crypt/load-trust-roots pem-path)))
+           (crypt/load-trust-roots pem-path)))
 
 (def origin "https://localhost")
 
@@ -68,12 +61,6 @@
          (-> node (nth 2) (nth 1))
          nil)))
 
-(defn log-halko [& what]
-   (future
-      (println "Log: " what)
-      ;(http/post "http://localhost:3001/log"
-      ;   {:form-params {:service "puumerkki" :msg (apply str what)}})
-      ))
 
 (defn fold [o s l]
    (if (empty? l)
@@ -202,7 +189,7 @@
                preparation-res  ;; construct the signable version
                   (pdf/add-watermarked-signature-space
                      "pdf/testi.pdf"
-                     "pdf/testi.pdf-signable-x"
+                     "pdf/testi.pdf-signable"
                      "Stephen Signer"
                      "pdf/stamp.jpeg"
                      100 300)]
@@ -273,8 +260,7 @@
 
       (= "/load-cas" (:uri req))
          (do
-            (log-halko "loading trust roots")
-            (load-trust-roots! "trust-roots.pem")
+            (log-halko "Showing trust roots")
             {:status 200
              :headers {"Content-Type" "text/html"}
              :body
@@ -350,17 +336,10 @@
                                "hae"]]
                             [:div {:id "mpollux" :class "result" :onClick "clearMe(this)"} ""]
 
-                            [:p "Varmenteet: "
+                            [:p "Luotetut varmenteet: "
                                [:button {:onClick "loadCAs()"}
-                               "lataa"]]
-                            [:div {:id "cas" :class "result" :onClick "clearMe(this)"} ""]
-
-                            [:p "Revokaatio: "
-                               [:button {:onClick "loadRevocation()"}
-                               "päivitä"]]
+                               "näytä"]]
                             [:div {:id "cas" :class "result" :onClick "clearMe(this)"} ""]]]
-
-
                       ]])})
    (catch Exception e
       (log-halko "ERROR: " e)
@@ -451,4 +430,3 @@
       (catch Exception e
          (log-halko "ERROR: " e)
          1)))
-

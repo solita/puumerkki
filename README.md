@@ -5,7 +5,9 @@ A library for communicating with DVV certificate card reader software
 
 ## Usage
 
-See `dev-src/clj/puumerkki/main.clj` for example usages
+See [`dev-src/clj/puumerkki/main.clj`](dev-src/clj/puumerkki/main.clj) for example usages
+
+Energiatodistuspalvelu uses this library. Check out the code from [energiatodistus-pdf namespace](https://github.com/solita/ara-etp/blob/main/etp-core/etp-backend/src/main/clj/solita/etp/service/energiatodistus_pdf.clj)
 
 ## Testing
 
@@ -19,6 +21,27 @@ JS-tests are run with Shadow-cljs. Install npm, run `npm install` and execute te
 ```
 npm test
 ```
+
+## Test server
+There is a test server, that can be used as an example when developing signature solutions. 
+
+The server can be used to sign certificates together with the card reader software.
+
+### Prerequisites
+1. Install the card reader software [https://dvv.fi/en/card-reader-software]()
+1. Visit [https://localhost:53952/]() and accept non-trusted certificate.
+1. Download root certificates of citizen certificates from DVV by running:\
+`./download-dvv-trusted-certificates.sh`
+ 
+### Running the server
+1. Start the server:\
+`lein with-profile dev run -t citizen-certificate-roots.pem`
+1. Start a reverse proxy to serve the content over https:\
+On macOS and on Windows (not tested):\
+`docker run -p 443:443 caddy caddy reverse-proxy --from localhost:443 --to http://host.docker.internal:3000`\
+On Linux (not tested):\
+`docker run -p 443:443 caddy caddy reverse-proxy --from localhost:443 --to http://localhost:3000`
+1. Access the server at [https://localhost](). Accept the self-signed certificate.
 
 ## Publishing
 ### Snapshots
