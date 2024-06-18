@@ -233,8 +233,9 @@
       (length-bs (count bs))
       bs)))
 
-;; as encode-set, but order is lexicographic
-(defn encode-set-of [& encoded]
+(defn encode-set-of
+  "As encode-set, but order is lexicographic"
+  [& encoded]
   (let [bs (apply concat (sort lex< encoded))]
     (concat
       (identifier class-universal is-constructed tag-set)
@@ -350,8 +351,9 @@
       :else
       (vector true (bit-or (bit-shift-left out 7) this) lst))))
 
-;; parsers are lst → ok/bool value/reason rest-of-input
-(defn parse-identifier [tag tail]
+(defn parse-identifier
+  "parsers are lst → ok/bool value/reason rest-of-input"
+  [tag tail]
   (let
     [class (bit-shift-right tag 6)
      consp (bit-and (bit-shift-right tag 5) 1)
@@ -610,8 +612,9 @@
         (println "ERROR: ASN.1 decoding failed: " value)
         nil))))
 
-;; a function for ast → binary → back to ast conversion, to check for differences introduced by encoding or decoding
-(defn asn1-rencode [ast]
+(defn asn1-rencode
+  "A function for ast → binary → back to ast conversion, to check for differences introduced by encoding or decoding"
+  [ast]
   (let
     [bs (asn1-encode ast)
      astp (asn1-decode bs)]
@@ -662,8 +665,9 @@
              (rest lst)
              (cons (concat lst left) opts)))))
 
-;; fuzzing note: degenerate inputs make this go exponential
-(defn match-set [asts pats rec]
+(defn match-set
+  "Fuzzing note: degenerate inputs make this go exponential"
+  [asts pats rec]
   (or (empty? pats)
       (some
         (fn [order] (match-set (rest order) (rest pats) rec))
@@ -671,8 +675,9 @@
           (fn [x] (rec (first x) (first pats)))
           (each-first asts)))))
 
-;; AST pattern → bool
-(defn asn1-match? [asn pat]
+(defn asn1-match?
+  "AST pattern → bool"
+  [asn pat]
    (cond
       (= pat :?)
          true
@@ -713,8 +718,9 @@
             rout))
       rout))
 
-;; AST pattern → AST' ∊ AST ∨ nil
-(defn asn1-find-left-dfs [asn pat]
+(defn asn1-find-left-dfs
+  "AST pattern → AST' ∊ AST ∨ nil"
+  [asn pat]
    (cond
       (asn1-match? asn pat)
          asn
@@ -723,8 +729,9 @@
       :else
          nil))
 
-;; AST pattern → [matching-subast ...], depth first, left to right
-(defn asn1-matches [asn pat]
+(defn asn1-matches
+  "AST pattern → [matching-subast ...], depth first, left to right"
+  [asn pat]
    (reverse (asn1-find-matches asn pat ())))
 
 (def asn1-find
@@ -862,8 +869,9 @@
 ;;; Base64 encoder
 ;;;
 
-;; digit in range → char in encoding
-(defn base64-digit [b]
+(defn base64-digit
+  "Digit in range → char in encoding"
+  [b]
   (cond
     (= b \=) b
     (== b (bit-and b 63))

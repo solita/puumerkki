@@ -123,8 +123,9 @@
           ; (println "ERROR: certificate chain validation failed for certificate: " sub)
           (cons :invalid-certificate-chain errs))))))
 
-;; exception -> boolean
-(defn cert-validity [errs cert]
+(defn cert-validity
+  "exception -> boolean"
+  [errs cert]
   (try
     (.checkValidity cert)
     errs
@@ -133,14 +134,16 @@
       errs
       )))
 
-(defn cert-revocation-status [errs cert]
-  ;; will likely need a both cert-provided checks and a custom one not relying
-  ;; on direct connections to CRL endpoints at time of checks.
+(defn cert-revocation-status
+  "Will likely need a both cert-provided checks and a custom one not relying
+  on direct connections to CRL endpoints at time of checks."
+  [errs cert]
   (println "WARNING: No CRL/OCSP handling yet.")
   errs)
 
-;; -> nil = ok, list of error symbols otherwise
-(defn validation-errors [roots sig-b64s msg-bytes chain]
+(defn validation-errors
+  "-> nil = ok, list of error symbols otherwise"
+  [roots sig-b64s msg-bytes chain]
   (try
     (let [cert (chain->signing-cert chain)
           pub (cert->pubkey cert)]
@@ -160,8 +163,9 @@
     (catch Exception e
       (list :validationerror))))
 
-;; You probably want to call validation-errors instead to be able to log/report the reasons
-(defn valid? [roots sig-b64s msg-string chain]
+(defn valid?
+  "You probably want to call validation-errors instead to be able to log/report the reasons"
+  [roots sig-b64s msg-string chain]
   (let [errs (validation-errors roots sig-b64s (string->bytes msg-string) chain)]
     (empty? errs)))
 
@@ -171,8 +175,9 @@
       n
       (recur (+ n 1) (*' 2 h)))))
 
-;; get bit count if applicable
-(defn rsa-key-size [pub]
+(defn rsa-key-size
+ "Get the bit count if applicable"
+  [pub]
   (try
     (n-bits (.getModulus pub))
     (catch Exception e
@@ -212,8 +217,9 @@
    :crl-points (crl-distribution-points cert)
    })
 
-;; -> nil if signature is invalid | map of signing certificate information
-(defn signer-info [roots sig-b64s msg-string chain]
+(defn signer-info
+  "-> nil if signature is invalid | map of signing certificate information"
+  [roots sig-b64s msg-string chain]
   (let [errs (validation-errors roots sig-b64s (string->bytes msg-string) chain)]
     (if (empty? errs)
       (cert->signer-info
@@ -222,9 +228,10 @@
         (println "signer-info: got errs " errs)
         false))))
 
-;; a variable data is usually a hash of the data/document/event.
-;; host prefix is added later.
-(defn authentication-challenge [secret variable-data]
+(defn authentication-challenge
+  "A variable data is usually a hash of the data/document/event.
+  host prefix is added later."
+  [secret variable-data]
   (let [now (System/currentTimeMillis)
         timestamped-data (str now "\n" variable-data)
         signature (hmac-sign secret timestamped-data)]
@@ -235,8 +242,9 @@
     (codec/base64-encode
       (str "https://" host "\n" data))))
 
-;; -> json in a string | false if unsupported version/algorithm combination
-(defn digisign-authentication-request [secret host version variable-data]
+(defn digisign-authentication-request
+  "-> json in a string | false if unsupported version/algorithm combination"
+  [secret host version variable-data]
   (let [challenge (digisign-authentication-challenge secret host version variable-data)]
     ;; future version-specific handling here later
     (str
