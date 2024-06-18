@@ -85,8 +85,9 @@
         array))
     nil))
 
-;; data-bvec offset pattern-vec → false | offset+length(pattern-vec)
-(defn vector-match-at [data offset pattern]
+(defn vector-match-at
+  "data-bvec offset pattern-vec → false | offset+length(pattern-vec)"
+  [data offset pattern]
   (loop [at 0]
     (let [want (get pattern at)]
       (if want
@@ -121,9 +122,9 @@
       :else
       (finish-num firstp n bs))))
 
-;; parse four space delimited decimal numbers
-;; these are the before and after byte ranges of signature
-(defn grab-byte-ranges [offset bs]
+(defn grab-byte-ranges
+  "Parse four space delimited decimal numbers. These are the before and after byte ranges of signature"
+  [offset bs]
   (let
     [[sa bs] (grab-num (skip-space bs))
      [la bs] (grab-num (skip-space bs))
@@ -133,17 +134,17 @@
       (vector offset sa la sb lb)
       (vector offset false false false false))))
 
-;; iterate over a data at a specific position
-(defn walk-buffer [buff pos]
+(defn walk-buffer
+  "Iterate over a data at a specific position"
+  [buff pos]
   (let [val (aget buff pos)]
     (if val
       (lazy-seq (cons val (walk-buffer buff (+ pos 1))))
       nil)))
 
-;; Find position of signature byte ranges from pdf data and get the numbers.
-;; Now that this is handled in backend, we could also get this while adding
-;; the space or by parsing the whole pdf.
-(defn find-byte-ranges [data]
+(defn find-byte-ranges
+  "Find position of signature byte ranges from pdf data and get the numbers. Now that this is handled in backend, we could also get this while adding the space or by parsing the whole pdf."
+  [data]
   (loop [at (- (count data) 1)]
     (if (= at -1)
       (vector false false false false false)
@@ -152,9 +153,9 @@
           (grab-byte-ranges posp (walk-buffer data posp))
           (recur (- at 1)))))))
 
-;; read the byte ranges (for hashing)
-;; bvec pos1 len1 pos2 len2 → bvec' | nil, if positions or lengths are missing
-(defn maybe-get-byte-ranges [data sa al sb bl]
+(defn maybe-get-byte-ranges
+  "Read the byte ranges (for hashing) bvec pos1 len1 pos2 len2 → bvec | nil, if positions or lengths are missing"
+  [data sa al sb bl]
   (if (and sa al sb bl)
     (let [temp (byte-array (+ al bl))]                      ;; room for data to be hashed
       (copy-bytes! temp (subarray data sa al) 0)            ;; copy before signature part
@@ -174,8 +175,9 @@
             [:set [:octet-string (map (partial bit-and 255) sha256sum)]]]])))
 
 
-;; This is the expression to be encoded and saved to PDF
-(defn make-pkcs7-asn [chain certinfo-asn sha256sum sha256withrsa]
+(defn make-pkcs7-asn
+  "This is the expression to be encoded and saved to PDF"
+  [chain certinfo-asn sha256sum sha256withrsa]
   [:sequence
    [:identifier 1 2 840 113549 1 7 2]                       ;; signedData
    [:explicit 0
@@ -205,16 +207,18 @@
        [:sequence [:identifier 1 2 840 113549 1 1 11] :null] ; sha256w/rsa
        [:octet-string sha256withrsa]]]]]])
 
-;; get certificate info for pkcs7
-(defn maybe-get-certificate-info [cert]
+(defn maybe-get-certificate-info
+  "Get certificate info for pkcs7"
+  [cert]
   (let [issuerinfo (-> cert (nth 1) (nth 4))                ;; could now use codec -> asn selectors
         keyid (nth (nth cert 1) 2)]
     (if (and keyid issuerinfo)
       [:sequence issuerinfo keyid]
       nil)))
 
-;; count number of ascii zeroes at position (which are used for signature area filling)
-(defn zeroes-at [^bytes data pos]
+(defn zeroes-at
+  "Count the number of ascii zeroes at position (which are used for signature area filling)"
+  [^bytes data pos]
   (loop [pos pos n 0]
     (let [val (aget data pos)]
       (if (= val 48)
@@ -253,9 +257,9 @@
     (sign [content]
       (byte-array (byte-array 100)))))
 
-;; "Signer Name", (nil | image) -> PDSignature
-
-(defn signature [name]
+(defn signature
+  "Signer Name -> PDSignature"
+  [name]
   (doto (PDSignature.)
     (.setFilter PDSignature/FILTER_ADOBE_PPKLITE)
     (.setSubFilter PDSignature/SUBFILTER_ADBE_PKCS7_DETACHED)
@@ -274,8 +278,9 @@
 
 ;; Warning! Do not parse user supplied PDF:s without proper safety equipment.
 
-;; "foo.pdf" "foo-signed.pdf" "Signer Name" -> "foo-signed.pdf" | nil on error
-(defn add-signature-space [pdf-path output-pdf-path signer-name]
+(defn add-signature-space
+  "foo.pdf foo-signed.pdf Signer Name -> foo-signed.pdf | nil on error"
+  [pdf-path output-pdf-path signer-name]
   (try
     (let [input-document (io/file pdf-path)
           doc (PDDocument/load input-document)
@@ -290,7 +295,7 @@
       output-pdf-path)
     (catch Exception e
       ;; log reason
-      ; add optoinal error logger
+      ; add optional error logger
       nil)))
 
 (defn add-watermarked-signature-space [pdf-path output-pdf-path signer-name image-path x y]
@@ -327,8 +332,9 @@
     ))
 
 
-;; write-signature pdf-data-byte-array pkcs7-asn1-der-byte-sequence → pdf-data-byte-array (modified) | nil
-(defn write-signature! [data pkcs7]
+(defn write-signature!
+  "Write-signature pdf-data-byte-array pkcs7-asn1-der-byte-sequence → pdf-data-byte-array (modified) | nil"
+  [data pkcs7]
   (let [signature (seq->byte-array (codec/hex-encode pkcs7))
         pos (find-signature-space data)]
     (if pos
@@ -351,8 +357,9 @@
   (if-let [node (codec/asn1-find asn [:sequence [:identifier 1 2 840 113549 1 9 4] [:set :octet-string]])]
     (-> node (nth 2) (nth 1) (nth 1))))
 
-;; pdf-data -> nil | validish-signature-ast (only structure and digest is verified, not the actual signature)
-(defn cursory-verify-signature [data]
+(defn cursory-verify-signature
+  "pdf-data -> nil | validish-signature-ast (only structure and digest is verified, not the actual signature)"
+  [data]
   (let [[at sa la sb lb] (find-byte-ranges data)]
     (if (and
           at sa sb lb                                       ;; byte ranges there
@@ -369,12 +376,13 @@
             (if-let [digest (message-digest asn-ast)]
               (if-let [correct-digest (signable-data-hash data)]
                 (if (= digest correct-digest)
-                  ;; all good so far
+                  all good so far
                   asn-ast
                   nil)))))))))
 
-;; first part of verification
-(defn partial-verify-signatures [pdf-path]
+(defn partial-verify-signatures
+  "First part of verification"
+  [pdf-path]
   (try
     (let [pdf (read-pdf pdf-path)]
       (reduce
@@ -406,8 +414,9 @@
     (catch Exception e
       nil)))
 
-;; switch to new validation via .crypt
-(defn verify-signatures [path]
+(defn verify-signatures
+  "Switch to new validation via .crypt"
+  [path]
   (and
     (partial-verify-signatures path)
     ; check revocation lists
