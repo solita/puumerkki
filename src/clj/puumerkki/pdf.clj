@@ -376,7 +376,7 @@
             (if-let [digest (message-digest asn-ast)]
               (if-let [correct-digest (signable-data-hash data)]
                 (if (= digest correct-digest)
-                  all good so far
+                  ;; all good so far
                   asn-ast
                   nil)))))))))
 

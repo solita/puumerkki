@@ -352,7 +352,7 @@
       (vector true (bit-or (bit-shift-left out 7) this) lst))))
 
 (defn parse-identifier
-  "parsers are lst → ok/bool value/reason rest-of-input"
+  "Parsers are lst → ok/bool value/reason rest-of-input"
   [tag tail]
   (let
     [class (bit-shift-right tag 6)
