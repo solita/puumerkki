@@ -6,5 +6,5 @@
                            [org.owasp/dependency-check-core "10.0.3"]
                            ;; Dependency-check-core brings in older version which doesn't work
                            [org.slf4j/slf4j-api "2.0.10"]
-                           [org.clojure/clojure "1.11.3"]]
+                           [org.clojure/clojure "1.11.4"]]
             :jvm-opts ["-Dclojure.main.report=stderr"])
