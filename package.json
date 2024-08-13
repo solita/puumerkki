@@ -6,7 +6,7 @@
         "karma": "6.4.3",
         "karma-chrome-launcher": "3.2.0",
         "karma-cljs-test": "0.1.0",
-        "shadow-cljs": "2.28.9"
+        "shadow-cljs": "2.28.12"
     },
     "scripts": {
         "kondo": "shadow-cljs run clj-kondo.main/main --lint src",
