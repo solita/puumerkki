@@ -6,8 +6,8 @@
   :min-lein-version "2.9.1"
   :dependencies [[org.clojure/clojure "1.11.4"]
                  [pandect "1.0.2"]                          ;; SHA
-                 ;[org.apache.pdfbox/pdfbox "1.8.17"] ;; no longer supported due to api changes required for 2.x
-                 [org.apache.pdfbox/pdfbox "2.0.32"]
+                 ;[org.apache.pdfbox/pdfbox "3.0.3"] ;; no longer supported due to api changes required for 2.x
+                 [org.apache.pdfbox/pdfbox "3.0.3"]
                  [org.bouncycastle/bcprov-jdk18on "1.78.1"]
                  [org.bouncycastle/bcmail-jdk18on "1.78.1"]
                  [commons-io "2.16.1"]
