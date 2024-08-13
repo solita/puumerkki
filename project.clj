@@ -11,7 +11,7 @@
                  [org.bouncycastle/bcprov-jdk18on "1.78.1"]
                  [org.bouncycastle/bcmail-jdk18on "1.78.1"]
                  [commons-io "2.16.1"]
-                 [commons-codec "1.17.0"]]
+                 [commons-codec "1.17.1"]]
   :aliases {"release-major"   ["do"
                                ["vcs" "assert-committed"]
                                ["change" "version" "leiningen.release/bump-version" "major"]
