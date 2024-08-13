@@ -1,4 +1,4 @@
-(defproject io.github.solita-antti-mottonen/puumerkki "0.11.1-SNAPSHOT"
+(defproject io.github.solita/puumerkki "0.11.1-SNAPSHOT"
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
   :url "https://github.com/solita/puumerkki"
