@@ -4,7 +4,7 @@
   :url "https://github.com/solita/puumerkki"
   :description "Puumerkki allekirjoituskirjasto ja esimerkkipalvelin"
   :min-lein-version "2.9.1"
-  :dependencies [[org.clojure/clojure "1.11.3"]
+  :dependencies [[org.clojure/clojure "1.11.4"]
                  [pandect "1.0.2"]                          ;; SHA
                  ;[org.apache.pdfbox/pdfbox "1.8.17"] ;; no longer supported due to api changes required for 2.x
                  [org.apache.pdfbox/pdfbox "2.0.31"]
