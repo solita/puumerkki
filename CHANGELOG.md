@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0
+### Breaking
+* Change group name to `io.github.solita`
+
+### Bugfixes and improvements
+* Update dependencies
+
 ## 0.11.0
 ### Bugfixes and improvements
 * Add type hints to speed up pdf operations significantly.

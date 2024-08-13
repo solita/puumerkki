@@ -70,11 +70,11 @@ After the release, a new snapshot version with patch number incremented is set.
 
 To release a new version, follow these steps:
 1. Switch to a new branch:\
-`git switch -c release`\
+`git switch -c release`
 1. Update `CHANGELOG.md`. Commit your changes.
 1. Check whether there are any changes after the last release that warrant incrementing either minor (new features) or major (breaking changes) version.
 Choose release task accordingly and run it:\
-`lein release-current`, `lein release-minor`, or `lein release-major`\
+`lein release-current`, `lein release-minor`, or `lein release-major`
 1. Push the branch with tags:\
 `git push --follow-tags --set-upstream origin release`
 1. Create a pull request and merge it to master.
