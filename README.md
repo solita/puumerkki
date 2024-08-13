@@ -1,6 +1,6 @@
 # Puumerkki
 ![NVD status](https://github.com/solita/puumerkki/actions/workflows/nvd.yml/badge.svg)
-[![Clojars Project](https://img.shields.io/clojars/v/io.github.solita-antti-mottonen/puumerkki.svg)](https://clojars.org/io.github.solita-antti-mottonen/puumerkki)
+[![Clojars Project](https://img.shields.io/clojars/v/io.github.solita/puumerkki.svg)](https://clojars.org/io.github.solita/puumerkki)
 
 Puumerkki is a library used for signing PDF documents. It can read and modify pdfs to prepare them for signing, calculate the hash for signing, create the signature container and embed it to the pdf. Signing is done by an external service, usually with an ID card from DVV together with a card reader and its software.
 
