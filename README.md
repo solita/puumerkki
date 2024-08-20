@@ -29,8 +29,8 @@ There is a test server, that can be used as an example when developing signature
 The server can be used to sign certificates together with the card reader software.
 
 ### Prerequisites
-1. Install the card reader software [https://dvv.fi/en/card-reader-software]()
-1. Visit [https://localhost:53952/]() and accept non-trusted certificate.
+1. Install the card reader software <https://dvv.fi/en/card-reader-software>
+1. Visit <https://localhost:53952/> and accept non-trusted certificate.
 1. Download root certificates of citizen certificates from DVV by running:\
 `./download-dvv-trusted-certificates.sh`
  
@@ -42,7 +42,7 @@ On macOS and on Windows (not tested):\
 `docker run -p 443:443 caddy caddy reverse-proxy --from localhost:443 --to http://host.docker.internal:3000`\
 On Linux (not tested):\
 `docker run -p 443:443 caddy caddy reverse-proxy --from localhost:443 --to http://localhost:3000`
-1. Access the server at [https://localhost](). Accept the self-signed certificate.
+1. Access the server at <https://localhost>. Accept the self-signed certificate.
 
 ## Publishing
 ### Snapshots
