@@ -3,7 +3,7 @@
             :dependencies [[nvd-clojure "4.0.0"
                             ;; Replaced by a newer version until NVD-Clojure is updated
                             :exclusions [org.owasp/dependency-check-core]]
-                           [org.owasp/dependency-check-core "10.0.3"]
+                           [org.owasp/dependency-check-core "10.0.4"]
                            ;; Dependency-check-core brings in older version which doesn't work
                            [org.slf4j/slf4j-api "2.0.16"]
                            [org.clojure/clojure "1.11.4"]]
