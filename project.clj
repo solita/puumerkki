@@ -49,7 +49,7 @@
                                     [hiccup "1.0.5"]
                                     [clj-http "3.13.0"]
                                     [ring/ring-jetty-adapter "1.12.2"]
-                                    [org.clojure/data.json "2.5.0"]]
+                                    [org.clojure/data.json "2.5.2"]]
                    :source-paths   ["dev-src/clj"]
                    :resource-paths ["res" "pdf"]
                    :main           puumerkki.main}})
