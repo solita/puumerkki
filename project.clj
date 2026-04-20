@@ -9,7 +9,7 @@
                  ;[org.apache.pdfbox/pdfbox "1.8.17"] ;; no longer supported due to api changes required for 2.x
                  [org.apache.pdfbox/pdfbox "2.0.32"]
                  [org.bouncycastle/bcprov-jdk18on "1.78.1"]
-                 [org.bouncycastle/bcmail-jdk18on "1.78.1"]
+                 [org.bouncycastle/bcmail-jdk18on "1.84"]
                  [commons-io "2.16.1"]
                  [commons-codec "1.17.1"]]
   :aliases {"release-major"   ["do"
