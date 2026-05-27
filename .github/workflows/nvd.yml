@@ -37,7 +37,7 @@ jobs:
         env:
           NVD_API_TOKEN: ${{ secrets.NVD_API_TOKEN }}
         run: lein with-profile -user run -m nvd.task.check "nvd-clojure.edn" "$(cd .. && lein with-profile -user,-dev classpath)"
-      - name: Save Maven cache # cache@v4 has save-always, but it's broken. Save manually until it's fixed
+      - name: Save Maven cache # Save the cache explicitly after the run when using separate restore/save cache steps
         if: always()
         uses: actions/cache/save@v5.0.5
         with:
